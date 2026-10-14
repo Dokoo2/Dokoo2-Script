@@ -18,6 +18,8 @@ local CHANGELOG = {
             "Fixed Aim — now works in shift-lock / first-person",
             "Look-Away reworked — rotates camera instead of cursor",
             "Aim smoothness now uses Lerp in locked camera mode",
+            "Config save/load now shows a notification + sound",
+            "ESP Tracers now come from your body instead of screen bottom",
         },
     },
     {
@@ -380,6 +382,36 @@ task.spawn(function()
         end
     end
 end)
+
+-- ============================================================
+--  NOTIFICATION SYSTEM (toast + sound)
+-- ============================================================
+local NOTIFY_SOUND_ID = "rbxassetid://18595195017"
+
+local function playNotifySound()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local sound = Instance.new("Sound")
+    sound.SoundId = NOTIFY_SOUND_ID
+    sound.Volume = 1
+    sound.Parent = hrp
+    sound:Play()
+    game:GetService("Debris"):AddItem(sound, 5)
+end
+
+local function notify(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 4,
+        })
+    end)
+    playNotifySound()
+end
 
 -- ============================================================
 --  COLOR PICKER POPUP
@@ -860,17 +892,32 @@ local function getOrCreateTracer(player)
     return tracerLines[player]
 end
 
+-- === TRACERS: from your body to target ===
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
+
     if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then
-        line.Visible = false; return
+        line.Visible = false
+        return
     end
-    local targetPos = character:FindFirstChild("Head") or rootPart
-    local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
-    if not onScreen or sp.Z <= 0 then line.Visible = false; return end
-    local viewport = Camera.ViewportSize
-    line.From = Vector2.new(viewport.X / 2, viewport.Y)
-    line.To = Vector2.new(sp.X, sp.Y)
+
+    local myChar = LocalPlayer.Character
+    if not myChar then line.Visible = false; return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then line.Visible = false; return end
+
+    local targetPart = character:FindFirstChild("Head") or rootPart
+
+    local spFrom, onFrom = Camera:WorldToViewportPoint(myRoot.Position)
+    local spTo,   onTo   = Camera:WorldToViewportPoint(targetPart.Position)
+
+    if not onFrom or not onTo or spFrom.Z <= 0 or spTo.Z <= 0 then
+        line.Visible = false
+        return
+    end
+
+    line.From = Vector2.new(spFrom.X, spFrom.Y)
+    line.To = Vector2.new(spTo.X, spTo.Y)
     line.Color = Config.ESP.TracerColor
     line.Thickness = Config.ESP.TracerThickness
     line.Transparency = 1
@@ -1065,7 +1112,6 @@ local function getClosestPlayerToCursor()
     local viewport = Camera.ViewportSize
     local cx, cy = viewport.X / 2, viewport.Y / 2
 
-    -- In shift-lock, "cursor" = center of screen
     local refX, refY
     if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
        or LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
@@ -1115,12 +1161,10 @@ RunService.RenderStepped:Connect(function()
     if not bodyPart then return end
 
     if isLockedCamera() then
-        -- Rotate camera directly (shift-lock / first-person)
         local currentCF = Camera.CFrame
         local targetCF = CFrame.lookAt(currentCF.Position, bodyPart.Position)
         Camera.CFrame = currentCF:Lerp(targetCF, Config.Aim.Smoothness)
     else
-        -- Move mouse (normal mode)
         if not hasMouseMoveRel then return end
         local screenPos = getScreenPoint(bodyPart)
         if not screenPos then return end
@@ -1134,7 +1178,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2.5: LOOK-AWAY (rotates camera in locked mode)
+--  BLOCK 2.5: LOOK-AWAY
 -- ============================================================
 local LOOK_AWAY_ANGLE_SCALE = 0.0015
 
@@ -1951,7 +1995,6 @@ vhLbl.TextXAlignment = Enum.TextXAlignment.Left
 vhLbl.Parent = verHeader
 addFont(vhLbl)
 
--- Render each version block
 for _, entry in ipairs(CHANGELOG) do
     local block = Instance.new("Frame")
     block.Size = UDim2.new(1, 0, 0, 0)
@@ -2325,11 +2368,22 @@ local function serializeValue(v)
 end
 
 local function saveConfig()
-    if not hasFileAPI then warn("[Vagrant] writefile/readfile not available."); return false end
+    if not hasFileAPI then
+        warn("[Vagrant] writefile/readfile not available.")
+        notify("Vagrant Survival", "Save failed — no file API")
+        return false
+    end
     local data = "return " .. serializeValue({ Config = Config, Theme = Theme })
     local ok = pcall(writefile, CONFIG_FILE, data)
-    if ok then print("[Vagrant] Config saved.") return true
-    else warn("[Vagrant] Save failed."); return false end
+    if ok then
+        print("[Vagrant] Config saved.")
+        notify("Vagrant Survival", "Config saved successfully!")
+        return true
+    else
+        warn("[Vagrant] Save failed.")
+        notify("Vagrant Survival", "Save failed")
+        return false
+    end
 end
 
 local function deepMerge(target, source)
@@ -2343,16 +2397,36 @@ local function deepMerge(target, source)
 end
 
 local function loadConfig()
-    if not hasFileAPI then warn("[Vagrant] writefile/readfile not available."); return false end
+    if not hasFileAPI then
+        warn("[Vagrant] writefile/readfile not available.")
+        notify("Vagrant Survival", "Load failed — no file API")
+        return false
+    end
     local ok1, exists = pcall(isfile, CONFIG_FILE)
-    if not ok1 or not exists then warn("[Vagrant] Config file not found."); return false end
+    if not ok1 or not exists then
+        warn("[Vagrant] Config file not found.")
+        notify("Vagrant Survival", "Config file not found")
+        return false
+    end
     local ok2, content = pcall(readfile, CONFIG_FILE)
-    if not ok2 or not content then warn("[Vagrant] Could not read file."); return false end
+    if not ok2 or not content then
+        warn("[Vagrant] Could not read file.")
+        notify("Vagrant Survival", "Could not read file")
+        return false
+    end
     local fn = loadstring or load
     local ok3, chunk = pcall(fn, content)
-    if not ok3 or not chunk then warn("[Vagrant] Parse error."); return false end
+    if not ok3 or not chunk then
+        warn("[Vagrant] Parse error.")
+        notify("Vagrant Survival", "Config parse error")
+        return false
+    end
     local ok4, data = pcall(chunk)
-    if not ok4 or type(data) ~= "table" then warn("[Vagrant] Config corrupted."); return false end
+    if not ok4 or type(data) ~= "table" then
+        warn("[Vagrant] Config corrupted.")
+        notify("Vagrant Survival", "Config corrupted")
+        return false
+    end
     if data.Config then deepMerge(Config, data.Config) end
     if data.Theme then deepMerge(Theme, data.Theme) end
 
@@ -2380,6 +2454,7 @@ local function loadConfig()
     syncAll()
     syncFontButtons()
     print("[Vagrant] Config loaded.")
+    notify("Vagrant Survival", "Config loaded successfully!")
     return true
 end
 
