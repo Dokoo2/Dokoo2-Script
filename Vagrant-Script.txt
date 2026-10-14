@@ -877,49 +877,25 @@ local function getOrCreateTracer(player)
     return tracerLines[player]
 end
 
--- Возвращает мировую позицию точки на теле локального игрока,
--- из которой будет исходить линия трейсера
-local function getLocalBodyPoint()
-    local myChar = LocalPlayer.Character
-    if not myChar then return nil end
-    local part = myChar:FindFirstChild("Head")
-        or myChar:FindFirstChild("UpperTorso")
-        or myChar:FindFirstChild("Torso")
-        or myChar:FindFirstChild("LowerTorso")
-        or myChar:FindFirstChild("HumanoidRootPart")
-    if part then return part.Position end
-    return nil
-end
-
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
     if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then
         line.Visible = false
         return
     end
-
-    -- Источник линии — ТЕЛО локального игрока (голова/торс/корень)
-    local myPos = getLocalBodyPoint()
-    if not myPos then line.Visible = false; return end
-
-    -- Цель линии — тело цели (голова предпочтительно)
-    local targetPart = character:FindFirstChild("Head")
-        or character:FindFirstChild("UpperTorso")
-        or character:FindFirstChild("Torso")
-        or rootPart
-    if not targetPart then line.Visible = false; return end
-
-    local spFrom, onFrom = Camera:WorldToViewportPoint(myPos)
+    local myChar = LocalPlayer.Character
+    if not myChar then line.Visible = false; return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then line.Visible = false; return end
+    local targetPart = character:FindFirstChild("Head") or rootPart
+    local spFrom, onFrom = Camera:WorldToViewportPoint(myRoot.Position)
     local spTo, onTo = Camera:WorldToViewportPoint(targetPart.Position)
-
-    -- Если точка за камерой — скрываем линию
     if not onFrom or not onTo or spFrom.Z <= 0 or spTo.Z <= 0 then
         line.Visible = false
         return
     end
-
     line.From = Vector2.new(spFrom.X, spFrom.Y)
-    line.To   = Vector2.new(spTo.X, spTo.Y)
+    line.To = Vector2.new(spTo.X, spTo.Y)
     line.Color = Config.ESP.TracerColor
     line.Thickness = Config.ESP.TracerThickness
     line.Transparency = 1
