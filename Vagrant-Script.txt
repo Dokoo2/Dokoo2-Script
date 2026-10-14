@@ -3,6 +3,21 @@
 --   by Dokoo2
 -- ============================================================
 
+-- ============================================================
+--  SINGLE-INSTANCE GUARD (blocks 2nd run + Roblox notification)
+-- ============================================================
+if _G.VagrantScriptLoaded then
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Vagrant Survival",
+            Text = "Don't launch more than once!",
+            Duration = 5,
+        })
+    end)
+    return
+end
+_G.VagrantScriptLoaded = true
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -211,12 +226,12 @@ local function applyTheme()
 end
 
 -- ============================================================
---  CUSTOM CURSOR  (IgnoreGuiInset = false — FIX)
+--  CUSTOM CURSOR
 -- ============================================================
 local cursorGui = Instance.new("ScreenGui")
 cursorGui.Name = "VagrantCursor"
 cursorGui.ResetOnSpawn = false
-cursorGui.IgnoreGuiInset = false       -- ⬅️ FIX: matches Mouse.X/Mouse.Y
+cursorGui.IgnoreGuiInset = false
 cursorGui.DisplayOrder = 999
 cursorGui.Parent = guiParent
 
