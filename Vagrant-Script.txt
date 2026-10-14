@@ -1,49 +1,22 @@
 -- ============================================================
 --   Vagrant Survival Best Script
 --   by Dokoo2
---   Version 2.1
 -- ============================================================
 
-local SCRIPT_VERSION = "2.1"
-
-local CHANGELOG = {
-    {
-        version = "2.1",
-        date = "Latest",
-        entries = {
-            "New tab: Last Updates (this changelog)",
-            "Fixed Aim - works in shift-lock / first-person",
-            "Look-Away reworked - rotates camera in locked mode",
-            "Aim smoothness uses Lerp in locked camera mode",
-            "Config save/load now shows a notification + sound",
-            "ESP Tracers now come from your body instead of screen bottom",
-            "Smart single-instance guard - no false re-launch blocks",
-        },
-    },
-    {
-        version = "2.0",
-        date = "",
-        entries = {
-            "Safe Mode tab - confirmed access, locks other tabs",
-            "Safe Mode: ESP (names only) + Freecam + Spectate",
-            "Mega Hacks tab - password protected",
-            "Single-instance guard added",
-            "Custom cursor now stays on top of everything",
-            "Cursor keep-alive every 1 second",
-        },
-    },
-    {
-        version = "1.9",
-        date = "",
-        entries = {
-            "Look-Away (anti-aim) feature added",
-            "ESP Tracers (lines to players) with color picker",
-            "Color picker rebuilt - HSV wheel + RGB + hex",
-            "Per-element ESP colors (name / HP / distance)",
-            "Highlight fill & outline color pickers",
-        },
-    },
-}
+-- ============================================================
+--  SINGLE-INSTANCE GUARD
+-- ============================================================
+if _G.VagrantScriptLoaded then
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Vagrant Survival",
+            Text = "Don't launch more than once!",
+            Duration = 5,
+        })
+    end)
+    return
+end
+_G.VagrantScriptLoaded = true
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -62,33 +35,6 @@ if type(gethui) == "function" then
     guiParent = ok and hui or LocalPlayer:WaitForChild("PlayerGui")
 else
     guiParent = LocalPlayer:WaitForChild("PlayerGui")
-end
-
--- ============================================================
---  SMART SINGLE-INSTANCE GUARD
--- ============================================================
-local function menuExists()
-    local ok, res = pcall(function()
-        if guiParent:FindFirstChild("VagrantMenu") then return true end
-        local plr = game:GetService("Players").LocalPlayer
-        if plr then
-            local pg = plr:FindFirstChildOfClass("PlayerGui")
-            if pg and pg:FindFirstChild("VagrantMenu") then return true end
-        end
-        return false
-    end)
-    return ok and res
-end
-
-if menuExists() then
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Vagrant Survival",
-            Text = "Do not launch more than once!",
-            Duration = 5,
-        })
-    end)
-    return
 end
 
 -- ============================================================
@@ -120,7 +66,7 @@ local function showSplash()
 
     local sub = Instance.new("TextLabel")
     sub.Size = UDim2.new(1, 0, 0, 16); sub.Position = UDim2.new(0, 0, 0, 40)
-    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2  |  v" .. SCRIPT_VERSION
+    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2"
     sub.TextColor3 = Color3.fromRGB(150, 100, 220); sub.Font = Enum.Font.Ubuntu; sub.TextSize = 11
     sub.Parent = card
 
@@ -222,10 +168,6 @@ local Config = {
     Font = "Ubuntu",
 }
 
-local safeModeActive = false
-local megaHacksUnlocked = false
-local MEGA_PASSWORD = "X1k*2j7W+1"
-
 -- ============================================================
 --  FONTS
 -- ============================================================
@@ -290,11 +232,12 @@ local function applyTheme()
 end
 
 -- ============================================================
---  CUSTOM CURSOR
+--  CUSTOM CURSOR (protected against reset, on top of everything)
 -- ============================================================
 local CursorCfg = Config.Cursor
 
 local function getHighestGuiParent()
+    -- Prefer gethui() so game cannot reset/parent-lock it
     if type(gethui) == "function" then
         local ok, hui = pcall(gethui)
         if ok and hui then return hui end
@@ -302,9 +245,11 @@ local function getHighestGuiParent()
     return LocalPlayer:WaitForChild("PlayerGui")
 end
 
-local cursorGui, cursorImage
+local cursorGui
+local cursorImage
 
 local function createCursorGui()
+    -- destroy old
     if cursorGui then pcall(function() cursorGui:Destroy() end) end
     local pg = getHighestGuiParent()
     if pg:FindFirstChild("VagrantCursor") then
@@ -316,7 +261,7 @@ local function createCursorGui()
     cursorGui.ResetOnSpawn = false
     cursorGui.IgnoreGuiInset = false
     cursorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    cursorGui.DisplayOrder = 2147483647
+    cursorGui.DisplayOrder = 2147483647   -- max int32 = on top of EVERYTHING
     pcall(function() cursorGui.Parent = pg end)
 
     cursorImage = Instance.new("ImageLabel")
@@ -327,7 +272,10 @@ local function createCursorGui()
     cursorImage.ZIndex = 2147483647
     cursorImage.Visible = false
     cursorImage.Parent = cursorGui
-    if CursorCfg.ImageId ~= "" then cursorImage.Image = CursorCfg.ImageId end
+
+    if CursorCfg.ImageId ~= "" then
+        cursorImage.Image = CursorCfg.ImageId
+    end
 end
 
 createCursorGui()
@@ -351,6 +299,7 @@ local function applyCursorImage(id)
     if cursorImage then cursorImage.Image = url end
 end
 
+-- Per-frame position update
 RunService.RenderStepped:Connect(function()
     if not CursorCfg.Enabled or CursorCfg.ImageId == "" then
         if cursorImage then cursorImage.Visible = false end
@@ -362,14 +311,20 @@ RunService.RenderStepped:Connect(function()
     cursorImage.Size = UDim2.new(0, CursorCfg.Size, 0, CursorCfg.Size)
 end)
 
+-- ============================================================
+--  CURSOR KEEP-ALIVE (every second: recreate + re-top + re-enable)
+-- ============================================================
 task.spawn(function()
     while true do
         task.wait(1)
         if CursorCfg.Enabled then
+            -- 1. Make sure the GUI is not parent-locked / deleted by the game
             local pg = getHighestGuiParent()
             if not cursorGui or not cursorGui.Parent or cursorGui.Parent ~= pg then
                 createCursorGui()
             end
+
+            -- 2. Make sure it's on top
             pcall(function() cursorGui.DisplayOrder = 2147483647 end)
             if cursorImage then
                 pcall(function() cursorImage.ZIndex = 2147483647 end)
@@ -377,46 +332,19 @@ task.spawn(function()
                     cursorImage.Image = CursorCfg.ImageId
                 end
             end
+
+            -- 3. Make sure default cursor is hidden
             if CursorCfg.HideDefault then
                 pcall(function() UserInputService.MouseIconEnabled = false end)
             end
+
+            -- 4. Force it visible
             if cursorImage and CursorCfg.ImageId ~= "" then
                 cursorImage.Visible = true
             end
         end
     end
 end)
-
--- ============================================================
---  NOTIFICATION SYSTEM
--- ============================================================
-local NOTIFY_SOUND_ID = "rbxassetid://18595195017"
-
-local function playNotifySound()
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        local sound = Instance.new("Sound")
-        sound.SoundId = NOTIFY_SOUND_ID
-        sound.Volume = 1
-        sound.Parent = hrp
-        sound:Play()
-        game:GetService("Debris"):AddItem(sound, 5)
-    end)
-end
-
-local function notify(title, text)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = 4,
-        })
-    end)
-    pcall(playNotifySound)
-end
 
 -- ============================================================
 --  COLOR PICKER POPUP
@@ -711,9 +639,12 @@ end
 
 local function refreshUI()
     cps_state.currentColor = Color3.fromHSV(cps_state.hue, cps_state.sat, cps_state.val)
+
     updateCursorPos()
+
     valueFill.Size = UDim2.new(cps_state.val, 0, 1, 0)
     valueVal.Text = tostring(math.floor(cps_state.val * 100 + 0.5))
+
     local r, g, b = cps_state.currentColor.R, cps_state.currentColor.G, cps_state.currentColor.B
     rgbSliders["R"].fill.Size = UDim2.new(r, 0, 1, 0)
     rgbSliders["R"].val.Text = tostring(math.floor(r * 255 + 0.5))
@@ -721,12 +652,19 @@ local function refreshUI()
     rgbSliders["G"].val.Text = tostring(math.floor(g * 255 + 0.5))
     rgbSliders["B"].fill.Size = UDim2.new(b, 0, 1, 0)
     rgbSliders["B"].val.Text = tostring(math.floor(b * 255 + 0.5))
+
     cpPreview.BackgroundColor3 = cps_state.currentColor
     local brightness = (r + g + b) / 3
     cpPreviewText.TextColor3 = brightness > 0.5 and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
     cpPreviewText.Text = toHex(cps_state.currentColor)
-    if not hexBox:IsFocused() then hexBox.Text = toHex(cps_state.currentColor) end
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.currentColor) end
+
+    if not hexBox:IsFocused() then
+        hexBox.Text = toHex(cps_state.currentColor)
+    end
+
+    if cps_state.onLiveChange then
+        cps_state.onLiveChange(cps_state.currentColor)
+    end
 end
 
 local draggingWheel = false
@@ -750,12 +688,14 @@ wheelButton.MouseButton1Down:Connect(function()
     local mp = UserInputService:GetMouseLocation()
     updateFromWheelInput(mp.X, mp.Y + 36)
 end)
+
 UserInputService.InputChanged:Connect(function(input)
     if draggingWheel and input.UserInputType == Enum.UserInputType.MouseMovement then
         local mp = UserInputService:GetMouseLocation()
         updateFromWheelInput(mp.X, mp.Y + 36)
     end
 end)
+
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingWheel = false end
 end)
@@ -767,12 +707,14 @@ valueBar.MouseButton1Down:Connect(function()
     cps_state.val = math.clamp((mp.X - valueBar.AbsolutePosition.X) / valueBar.AbsoluteSize.X, 0, 1)
     refreshUI()
 end)
+
 UserInputService.InputChanged:Connect(function(input)
     if draggingValue and input.UserInputType == Enum.UserInputType.MouseMovement then
         cps_state.val = math.clamp((input.Position.X - valueBar.AbsolutePosition.X) / valueBar.AbsoluteSize.X, 0, 1)
         refreshUI()
     end
 end)
+
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingValue = false end
 end)
@@ -793,6 +735,7 @@ for channel, data in pairs(rgbSliders) do
         refreshUI()
     end)
 end
+
 UserInputService.InputChanged:Connect(function(input)
     if draggingRGB and input.UserInputType == Enum.UserInputType.MouseMovement then
         local data = rgbSliders[draggingRGB]
@@ -807,6 +750,7 @@ UserInputService.InputChanged:Connect(function(input)
         refreshUI()
     end
 end)
+
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingRGB = nil end
 end)
@@ -831,15 +775,19 @@ cpCancelBtn.MouseButton1Click:Connect(function()
     if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
     closePicker()
 end)
+
 cpApplyBtn.MouseButton1Click:Connect(closePicker)
+
 cpCloseBtn.MouseButton1Click:Connect(function()
     if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
     closePicker()
 end)
+
 cpBackdrop.MouseButton1Click:Connect(function()
     if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
     closePicker()
 end)
+
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.Escape and cpGui.Enabled then
@@ -858,7 +806,7 @@ local function openColorPicker(initialColor, onChange)
 end
 
 -- ============================================================
---  BLOCK 1: ESP + TRACERS (from body)
+--  BLOCK 1: ESP + TRACERS
 -- ============================================================
 local espHighlights, espBillboards = {}, {}
 local tracerLines = {}
@@ -880,22 +828,14 @@ end
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
     if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then
-        line.Visible = false
-        return
+        line.Visible = false; return
     end
-    local myChar = LocalPlayer.Character
-    if not myChar then line.Visible = false; return end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then line.Visible = false; return end
-    local targetPart = character:FindFirstChild("Head") or rootPart
-    local spFrom, onFrom = Camera:WorldToViewportPoint(myRoot.Position)
-    local spTo, onTo = Camera:WorldToViewportPoint(targetPart.Position)
-    if not onFrom or not onTo or spFrom.Z <= 0 or spTo.Z <= 0 then
-        line.Visible = false
-        return
-    end
-    line.From = Vector2.new(spFrom.X, spFrom.Y)
-    line.To = Vector2.new(spTo.X, spTo.Y)
+    local targetPos = character:FindFirstChild("Head") or rootPart
+    local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
+    if not onScreen or sp.Z <= 0 then line.Visible = false; return end
+    local viewport = Camera.ViewportSize
+    line.From = Vector2.new(viewport.X / 2, viewport.Y)
+    line.To = Vector2.new(sp.X, sp.Y)
     line.Color = Config.ESP.TracerColor
     line.Thickness = Config.ESP.TracerThickness
     line.Transparency = 1
@@ -925,17 +865,14 @@ end
 
 local function buildESPLabelText(player, humanoid, distance)
     local lines = {}
-    local showName = Config.ESP.ShowName or safeModeActive
-    local showHP = Config.ESP.ShowHP and not safeModeActive
-    local showDist = Config.ESP.ShowDistance and not safeModeActive
-    if showName then
+    if Config.ESP.ShowName then
         table.insert(lines, string.format('<font color="%s">%s</font>', colorToRichTag(Config.ESP.NameColor), player.Name))
     end
-    if showHP then
+    if Config.ESP.ShowHP then
         table.insert(lines, string.format('<font color="%s">HP: %d/%d</font>',
             colorToRichTag(Config.ESP.HPColor), math.floor(humanoid.Health), math.floor(humanoid.MaxHealth)))
     end
-    if showDist then
+    if Config.ESP.ShowDistance then
         table.insert(lines, string.format('<font color="%s">Distance: %d studs</font>',
             colorToRichTag(Config.ESP.DistanceColor), math.floor(distance)))
     end
@@ -971,7 +908,7 @@ local function updateESP(player)
         if espHighlights[player] then espHighlights[player]:Destroy(); espHighlights[player] = nil end
     end
 
-    local anyText = Config.ESP.ShowName or Config.ESP.ShowHP or Config.ESP.ShowDistance or safeModeActive
+    local anyText = Config.ESP.ShowName or Config.ESP.ShowHP or Config.ESP.ShowDistance
     if not anyText then
         if espBillboards[player] then espBillboards[player]:Destroy(); espBillboards[player] = nil end
         return
@@ -1029,7 +966,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2: AIM (works in shift-lock)
+--  BLOCK 2: AIM
 -- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
@@ -1081,24 +1018,11 @@ local function isTargetDirectlyAboveOrBelow()
     return false
 end
 
-local function isLockedCamera()
-    return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-        or LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson
-end
-
 local function getClosestPlayerToCursor()
     local closest, shortDist = nil, Config.Aim.FOVRadius
     local mousePos = UserInputService:GetMouseLocation()
     local cameraPos = Camera.CFrame.Position
     local cameraLook = Camera.CFrame.LookVector
-    local viewport = Camera.ViewportSize
-    local cx, cy = viewport.X / 2, viewport.Y / 2
-    local refX, refY
-    if isLockedCamera() then
-        refX, refY = cx, cy
-    else
-        refX, refY = mousePos.X, mousePos.Y
-    end
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
         local character = player.Character
@@ -1114,7 +1038,7 @@ local function getClosestPlayerToCursor()
         if cameraLook:Dot(dirUnit) < Config.Aim.MinDot then continue end
         local screenPos = getScreenPoint(bodyPart)
         if not screenPos then continue end
-        local d = (screenPos - Vector2.new(refX, refY)).Magnitude
+        local d = (screenPos - mousePos).Magnitude
         if d < shortDist then shortDist = d; closest = player end
     end
     return closest
@@ -1123,8 +1047,7 @@ end
 local hasMouseMoveRel = type(mousemoverel) == "function"
 
 RunService.RenderStepped:Connect(function()
-    if not Config.Aim.Enabled then return end
-    if safeModeActive then return end
+    if not Config.Aim.Enabled or not hasMouseMoveRel then return end
     if isTargetDirectlyAboveOrBelow() then return end
     local target = getClosestPlayerToCursor()
     if not target then return end
@@ -1132,35 +1055,37 @@ RunService.RenderStepped:Connect(function()
     if not character then return end
     local bodyPart = getAimPart(character)
     if not bodyPart then return end
-    if isLockedCamera() then
-        local currentCF = Camera.CFrame
-        local targetCF = CFrame.lookAt(currentCF.Position, bodyPart.Position)
-        Camera.CFrame = currentCF:Lerp(targetCF, Config.Aim.Smoothness)
-    else
-        if not hasMouseMoveRel then return end
-        local screenPos = getScreenPoint(bodyPart)
-        if not screenPos then return end
-        local mousePos = UserInputService:GetMouseLocation()
-        local dx, dy = screenPos.X - mousePos.X, screenPos.Y - mousePos.Y
-        if math.abs(dx) < 1 and math.abs(dy) < 1 then return end
-        local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
-        local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
-        mousemoverel(mx, my)
-    end
+    local screenPos = getScreenPoint(bodyPart)
+    if not screenPos then return end
+    local mousePos = UserInputService:GetMouseLocation()
+    local dx, dy = screenPos.X - mousePos.X, screenPos.Y - mousePos.Y
+    if math.abs(dx) < 1 and math.abs(dy) < 1 then return end
+    local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
+    local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
+    mousemoverel(mx, my)
 end)
 
 -- ============================================================
---  BLOCK 2.5: LOOK-AWAY
+--  BLOCK 2.5: LOOK-AWAY (anti-aim in shift-lock / first-person)
 -- ============================================================
-local LOOK_AWAY_ANGLE_SCALE = 0.0015
+local function isShiftLockOrFirstPerson()
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        return true
+    end
+    if LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
+        return true
+    end
+    return false
+end
 
 RunService.RenderStepped:Connect(function()
-    if not Config.LookAway.Enabled then return end
-    if safeModeActive then return end
-    if not isLockedCamera() then return end
+    if not Config.LookAway.Enabled or not hasMouseMoveRel then return end
+    if not isShiftLockOrFirstPerson() then return end
+
     local viewport = Camera.ViewportSize
     local cx, cy = viewport.X / 2, viewport.Y / 2
     local cameraPos = Camera.CFrame.Position
+
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         local character = player.Character
@@ -1169,20 +1094,27 @@ RunService.RenderStepped:Connect(function()
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not humanoid or not rootPart then continue end
         if humanoid.Health <= 0 then continue end
+
         local worldDist = (rootPart.Position - cameraPos).Magnitude
         if worldDist > Config.LookAway.MaxDistance then continue end
+
         local targetPart = character:FindFirstChild("Head") or rootPart
         local sp, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
         if not onScreen or sp.Z <= 0 then continue end
+
         local dx = sp.X - cx
         local dy = sp.Y - cy
         local dist = math.sqrt(dx * dx + dy * dy)
         if dist > Config.LookAway.Radius then continue end
-        if dist < 0.1 then dx, dy, dist = 1, 0, 1 end
-        local strength = Config.LookAway.Strength * LOOK_AWAY_ANGLE_SCALE
-        local yawOffset = -(dx / dist) * strength
-        local pitchOffset = -(dy / dist) * strength
-        Camera.CFrame = Camera.CFrame * CFrame.Angles(pitchOffset, yawOffset, 0)
+        if dist < 0.1 then
+            dx, dy = 1, 0
+            dist = 1
+        end
+
+        local pushX = -(dx / dist) * Config.LookAway.Strength
+        local pushY = -(dy / dist) * Config.LookAway.Strength
+
+        mousemoverel(pushX, pushY)
     end
 end)
 
@@ -1470,7 +1402,7 @@ table.insert(ThemeRefs.text, {el=titleLbl, p="TextColor3"})
 local subtitleLbl = Instance.new("TextLabel")
 subtitleLbl.Size = UDim2.new(1, -12, 0, 16); subtitleLbl.Position = UDim2.new(0, 12, 0, 26)
 subtitleLbl.BackgroundTransparency = 1
-subtitleLbl.Text = "by Dokoo2  |  v" .. SCRIPT_VERSION .. "  |  F1 to close / open"
+subtitleLbl.Text = "by Dokoo2  •  Press F1 to close / open the menu"
 subtitleLbl.TextSize = 10
 subtitleLbl.TextTransparency = 0.2
 subtitleLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -1522,28 +1454,33 @@ local function makeToggle(parent, name, getter, setter, callback)
     btn.Text = ""; btn.AutoButtonColor = false; btn.Parent = parent
     addBtn(btn)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
+
     local indicator = Instance.new("Frame")
     indicator.Size = UDim2.new(0, 3, 1, -8); indicator.Position = UDim2.new(0, 4, 0, 4)
     indicator.BorderSizePixel = 0; indicator.Parent = btn
     local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(1, 0); ic.Parent = indicator
+
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -70, 1, 0); lbl.Position = UDim2.new(0, 14, 0, 0)
     lbl.BackgroundTransparency = 1; lbl.Text = name
     lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = btn
     addText(lbl); addFont(lbl)
+
     local stateLbl = Instance.new("TextLabel")
     stateLbl.Size = UDim2.new(0, 60, 1, 0); stateLbl.Position = UDim2.new(1, -70, 0, 0)
     stateLbl.BackgroundTransparency = 1
     stateLbl.TextSize = 11; stateLbl.TextXAlignment = Enum.TextXAlignment.Right
     stateLbl.Parent = btn
     addFont(stateLbl)
+
     registerSync(function()
         local state = getter()
         indicator.BackgroundColor3 = state and Color3.fromRGB(120, 230, 140) or Color3.fromRGB(80, 40, 40)
         stateLbl.Text = state and "ON" or "OFF"
         stateLbl.TextColor3 = state and Color3.fromRGB(120, 230, 140) or Color3.fromRGB(220, 110, 110)
     end)
+
     btn.MouseButton1Click:Connect(function()
         setter(not getter())
         if callback then callback(getter()) end
@@ -1557,12 +1494,14 @@ local function makeSlider(parent, name, min, max, getter, setter, isInt, callbac
     row.Size = UDim2.new(1, 0, 0, 34); row.BorderSizePixel = 0; row.Parent = parent
     addBtn(row)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
+
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size = UDim2.new(1, -80, 0, 18); nameLbl.Position = UDim2.new(0, 12, 0, 2)
     nameLbl.BackgroundTransparency = 1; nameLbl.Text = name
     nameLbl.TextSize = 12
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left; nameLbl.Parent = row
     addText(nameLbl); addFont(nameLbl)
+
     local valLbl = Instance.new("TextLabel")
     valLbl.Size = UDim2.new(0, 70, 0, 18); valLbl.Position = UDim2.new(1, -80, 0, 2)
     valLbl.BackgroundTransparency = 1
@@ -1571,22 +1510,27 @@ local function makeSlider(parent, name, min, max, getter, setter, isInt, callbac
     valLbl.TextXAlignment = Enum.TextXAlignment.Right; valLbl.Parent = row
     table.insert(ThemeRefs.text, {el=valLbl, p="TextColor3"})
     addFont(valLbl)
+
     local bar = Instance.new("TextButton")
     bar.Size = UDim2.new(1, -24, 0, 6); bar.Position = UDim2.new(0, 12, 1, -12)
     bar.BorderSizePixel = 0; bar.Text = ""; bar.AutoButtonColor = false; bar.Parent = row
     addBtn(bar)
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(1, 0); bc.Parent = bar
+
     local fill = Instance.new("Frame")
     fill.BorderSizePixel = 0; fill.Parent = bar
     addAccent(fill)
     local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fill
+
     local dragging = false
+
     registerSync(function()
         local value = getter()
         local rel = math.clamp((value - min) / (max - min), 0, 1)
         fill.Size = UDim2.new(rel, 0, 1, 0)
         valLbl.Text = isInt and tostring(math.floor(value + 0.5)) or string.format("%.2f", value)
     end)
+
     local function updateFromX(x)
         local rel = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
         local v = min + (max - min) * rel
@@ -1595,6 +1539,7 @@ local function makeSlider(parent, name, min, max, getter, setter, isInt, callbac
         if callback then callback(v) end
         syncAll()
     end
+
     bar.MouseButton1Down:Connect(function()
         dragging = true; updateFromX(UserInputService:GetMouseLocation().X)
     end)
@@ -1614,12 +1559,14 @@ local function makeTextBox(parent, name, getter, setter, callback, placeholder)
     row.Size = UDim2.new(1, 0, 0, 36); row.BorderSizePixel = 0; row.Parent = parent
     addBtn(row)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
+
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size = UDim2.new(1, -24, 0, 14); nameLbl.Position = UDim2.new(0, 12, 0, 2)
     nameLbl.BackgroundTransparency = 1; nameLbl.Text = name
     nameLbl.TextSize = 11
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left; nameLbl.Parent = row
     addText(nameLbl); addFont(nameLbl)
+
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, -24, 0, 16); box.Position = UDim2.new(0, 12, 0, 18)
     box.BackgroundColor3 = Theme.Background; box.BorderSizePixel = 0
@@ -1632,7 +1579,9 @@ local function makeTextBox(parent, name, getter, setter, callback, placeholder)
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = box
     local pad = Instance.new("UIPadding")
     pad.PaddingLeft = UDim.new(0, 6); pad.PaddingRight = UDim.new(0, 6); pad.Parent = box
+
     registerSync(function() box.Text = getter() or "" end)
+
     box.FocusLost:Connect(function()
         setter(box.Text)
         if callback then callback(box.Text) end
@@ -1670,17 +1619,20 @@ local function makeColorPicker(parent, name, getter, setter)
     row.Size = UDim2.new(1, 0, 0, 30); row.BorderSizePixel = 0; row.Parent = parent
     addBtn(row)
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
+
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -104, 1, 0); lbl.Position = UDim2.new(0, 10, 0, 0)
     lbl.BackgroundTransparency = 1; lbl.Text = name
     lbl.TextSize = 11
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
     addText(lbl); addFont(lbl)
+
     local preview = Instance.new("Frame")
     preview.Size = UDim2.new(0, 22, 0, 20); preview.Position = UDim2.new(1, -96, 0, 5)
     preview.BorderSizePixel = 0; preview.Parent = row
     local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 4); pc.Parent = preview
     local ps = Instance.new("UIStroke"); ps.Thickness = 1; ps.Color = Color3.fromRGB(60, 60, 70); ps.Parent = preview
+
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 68, 0, 20); btn.Position = UDim2.new(1, -70, 0, 5)
     btn.BorderSizePixel = 0
@@ -1690,153 +1642,25 @@ local function makeColorPicker(parent, name, getter, setter)
     btn.Parent = row
     addBtn(btn); addText(btn); addFont(btn)
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
+
     registerSync(function()
         preview.BackgroundColor3 = getter()
     end)
+
     btn.MouseButton1Click:Connect(function()
         openColorPicker(getter(), function(col)
             setter(col)
             syncAll()
         end)
     end)
+
     return row
 end
 
 -- ============================================================
---  POPUPS
--- ============================================================
-local function makePopup(title, width, height)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "VagrantPopup_" .. title
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.DisplayOrder = 500
-    gui.Enabled = false
-    gui.Parent = guiParent
-    local backdrop = Instance.new("TextButton")
-    backdrop.Size = UDim2.new(1, 0, 1, 0)
-    backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
-    backdrop.BackgroundTransparency = 0.4
-    backdrop.BorderSizePixel = 0
-    backdrop.Text = ""
-    backdrop.AutoButtonColor = false
-    backdrop.Parent = gui
-    local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, width, 0, height)
-    card.Position = UDim2.new(0.5, -width/2, 0.5, -height/2)
-    card.BorderSizePixel = 0
-    card.Active = true
-    card.Parent = gui
-    addPanel(card)
-    local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 10); cc.Parent = card
-    local cs = Instance.new("UIStroke"); cs.Thickness = 1.5; cs.Parent = card
-    addStroke(cs)
-    return gui, backdrop, card
-end
-
-local safeConfirmGui, safeConfirmBackdrop, safeConfirmCard = makePopup("SafeModeConfirm", 400, 180)
-local scTitle = Instance.new("TextLabel")
-scTitle.Size = UDim2.new(1, -20, 0, 28); scTitle.Position = UDim2.new(0, 10, 0, 10)
-scTitle.BackgroundTransparency = 1
-scTitle.Text = "Are you sure?"
-scTitle.TextSize = 15
-scTitle.TextColor3 = Theme.Text
-scTitle.Font = Enum.Font.GothamBold
-scTitle.Parent = safeConfirmCard
-addFont(scTitle)
-local scWarn = Instance.new("TextLabel")
-scWarn.Size = UDim2.new(1, -20, 0, 60); scWarn.Position = UDim2.new(0, 10, 0, 44)
-scWarn.BackgroundTransparency = 1
-scWarn.Text = "By clicking Yes, you won't be able to use other cheats."
-scWarn.TextSize = 12
-scWarn.TextColor3 = Color3.fromRGB(220, 160, 160)
-scWarn.TextWrapped = true
-scWarn.Parent = safeConfirmCard
-addFont(scWarn)
-local scBtnRow = Instance.new("Frame")
-scBtnRow.Size = UDim2.new(1, -20, 0, 32); scBtnRow.Position = UDim2.new(0, 10, 1, -42)
-scBtnRow.BackgroundTransparency = 1
-scBtnRow.Parent = safeConfirmCard
-local scLayout = Instance.new("UIListLayout")
-scLayout.FillDirection = Enum.FillDirection.Horizontal
-scLayout.Padding = UDim.new(0, 8)
-scLayout.SortOrder = Enum.SortOrder.LayoutOrder
-scLayout.Parent = scBtnRow
-local scNoBtn = Instance.new("TextButton")
-scNoBtn.Size = UDim2.new(0.5, -4, 1, 0); scNoBtn.BorderSizePixel = 0
-scNoBtn.Text = "No"; scNoBtn.TextSize = 12; scNoBtn.AutoButtonColor = true
-scNoBtn.Parent = scBtnRow
-addBtn(scNoBtn); addText(scNoBtn); addFont(scNoBtn)
-local scNoC = Instance.new("UICorner"); scNoC.CornerRadius = UDim.new(0, 6); scNoC.Parent = scNoBtn
-local scYesBtn = Instance.new("TextButton")
-scYesBtn.Size = UDim2.new(0.5, -4, 1, 0); scYesBtn.BorderSizePixel = 0
-scYesBtn.Text = "Yes"; scYesBtn.TextSize = 12; scYesBtn.AutoButtonColor = true
-scYesBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-scYesBtn.TextColor3 = Color3.new(1, 1, 1)
-scYesBtn.Parent = scBtnRow
-addFont(scYesBtn)
-local scYesC = Instance.new("UICorner"); scYesC.CornerRadius = UDim.new(0, 6); scYesC.Parent = scYesBtn
-
-local megaPassGui, megaPassBackdrop, megaPassCard = makePopup("MegaHacksPassword", 400, 180)
-local mpTitle = Instance.new("TextLabel")
-mpTitle.Size = UDim2.new(1, -20, 0, 28); mpTitle.Position = UDim2.new(0, 10, 0, 10)
-mpTitle.BackgroundTransparency = 1
-mpTitle.Text = "Password Required"
-mpTitle.TextSize = 15
-mpTitle.TextColor3 = Theme.Text
-mpTitle.Font = Enum.Font.GothamBold
-mpTitle.Parent = megaPassCard
-addFont(mpTitle)
-local mpBox = Instance.new("TextBox")
-mpBox.Size = UDim2.new(1, -20, 0, 32); mpBox.Position = UDim2.new(0, 10, 0, 48)
-mpBox.BackgroundColor3 = Theme.Background
-mpBox.BorderSizePixel = 0
-mpBox.PlaceholderText = "Enter password..."
-mpBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
-mpBox.Text = ""
-mpBox.TextColor3 = Theme.Text
-mpBox.TextSize = 12
-mpBox.ClearTextOnFocus = false
-mpBox.Parent = megaPassCard
-addFont(mpBox)
-local mpBoxC = Instance.new("UICorner"); mpBoxC.CornerRadius = UDim.new(0, 6); mpBoxC.Parent = mpBox
-local mpBoxPad = Instance.new("UIPadding"); mpBoxPad.PaddingLeft = UDim.new(0, 8); mpBoxPad.PaddingRight = UDim.new(0, 8); mpBoxPad.Parent = mpBox
-local mpErr = Instance.new("TextLabel")
-mpErr.Size = UDim2.new(1, -20, 0, 16); mpErr.Position = UDim2.new(0, 10, 0, 86)
-mpErr.BackgroundTransparency = 1
-mpErr.Text = ""
-mpErr.TextSize = 11
-mpErr.TextColor3 = Color3.fromRGB(220, 100, 100)
-mpErr.Parent = megaPassCard
-addFont(mpErr)
-local mpBtnRow = Instance.new("Frame")
-mpBtnRow.Size = UDim2.new(1, -20, 0, 32); mpBtnRow.Position = UDim2.new(0, 10, 1, -42)
-mpBtnRow.BackgroundTransparency = 1
-mpBtnRow.Parent = megaPassCard
-local mpLayout = Instance.new("UIListLayout")
-mpLayout.FillDirection = Enum.FillDirection.Horizontal
-mpLayout.Padding = UDim.new(0, 8)
-mpLayout.SortOrder = Enum.SortOrder.LayoutOrder
-mpLayout.Parent = mpBtnRow
-local mpCancelBtn = Instance.new("TextButton")
-mpCancelBtn.Size = UDim2.new(0.5, -4, 1, 0); mpCancelBtn.BorderSizePixel = 0
-mpCancelBtn.Text = "Cancel"; mpCancelBtn.TextSize = 12; mpCancelBtn.AutoButtonColor = true
-mpCancelBtn.Parent = mpBtnRow
-addBtn(mpCancelBtn); addText(mpCancelBtn); addFont(mpCancelBtn)
-local mpCanC = Instance.new("UICorner"); mpCanC.CornerRadius = UDim.new(0, 6); mpCanC.Parent = mpCancelBtn
-local mpSubmitBtn = Instance.new("TextButton")
-mpSubmitBtn.Size = UDim2.new(0.5, -4, 1, 0); mpSubmitBtn.BorderSizePixel = 0
-mpSubmitBtn.Text = "Submit"; mpSubmitBtn.TextSize = 12; mpSubmitBtn.AutoButtonColor = true
-mpSubmitBtn.Parent = mpBtnRow
-addAccent(mpSubmitBtn)
-mpSubmitBtn.TextColor3 = Color3.new(1, 1, 1)
-addFont(mpSubmitBtn)
-local mpSubC = Instance.new("UICorner"); mpSubC.CornerRadius = UDim.new(0, 6); mpSubC.Parent = mpSubmitBtn
-
--- ============================================================
 --  TABS
 -- ============================================================
-local tabNames = { "Customization", "Game", "Game Customization", "Safe Mode", "Mega Hacks", "Last Updates" }
+local tabNames = { "Customization", "Game", "Game Customization" }
 local tabButtons, tabFrames = {}, {}
 
 local function switchTab(name)
@@ -1854,7 +1678,7 @@ end
 
 for i, name in ipairs(tabNames) do
     local tb = Instance.new("TextButton")
-    tb.Size = UDim2.new(1, 0, 0, 38)
+    tb.Size = UDim2.new(1, 0, 0, 40)
     tb.BorderSizePixel = 0; tb.Text = name
     tb.TextSize = 11; tb.AutoButtonColor = true
     tb.TextWrapped = true
@@ -1876,310 +1700,43 @@ for i, name in ipairs(tabNames) do
     layout.Parent = sf
     tabFrames[name] = sf
 
-    tb.MouseButton1Click:Connect(function()
-        if name == "Safe Mode" and not safeModeActive then
-            safeConfirmGui.Enabled = true
-            return
-        end
-        if name == "Mega Hacks" and not megaHacksUnlocked then
-            mpBox.Text = ""
-            mpErr.Text = ""
-            megaPassGui.Enabled = true
-            return
-        end
-        switchTab(name)
-    end)
+    tb.MouseButton1Click:Connect(function() switchTab(name) end)
 end
 
 local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
-local safeTab = tabFrames["Safe Mode"]
-local megaTab = tabFrames["Mega Hacks"]
-local updatesTab = tabFrames["Last Updates"]
-
--- ============================================================
---  LAST UPDATES TAB
--- ============================================================
-makeSectionHeader(updatesTab, "VAGRANT SURVIVAL - CHANGELOG")
-
-local verHeader = Instance.new("Frame")
-verHeader.Size = UDim2.new(1, 0, 0, 40); verHeader.BackgroundTransparency = 1
-verHeader.Parent = updatesTab
-addBtn(verHeader)
-local vhc = Instance.new("UICorner"); vhc.CornerRadius = UDim.new(0, 8); vhc.Parent = verHeader
-verHeader.BackgroundColor3 = Theme.Accent
-
-local vhLbl = Instance.new("TextLabel")
-vhLbl.Size = UDim2.new(1, -20, 1, 0); vhLbl.Position = UDim2.new(0, 10, 0, 0)
-vhLbl.BackgroundTransparency = 1
-vhLbl.Text = "Current version: " .. SCRIPT_VERSION
-vhLbl.TextSize = 14
-vhLbl.TextColor3 = Color3.new(1, 1, 1)
-vhLbl.Font = Enum.Font.GothamBold
-vhLbl.TextXAlignment = Enum.TextXAlignment.Left
-vhLbl.Parent = verHeader
-addFont(vhLbl)
-
-for _, entry in ipairs(CHANGELOG) do
-    local block = Instance.new("Frame")
-    block.Size = UDim2.new(1, 0, 0, 0)
-    block.AutomaticSize = Enum.AutomaticSize.Y
-    block.BorderSizePixel = 0
-    block.Parent = updatesTab
-    addBtn(block)
-    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = block
-    local bs = Instance.new("UIStroke"); bs.Thickness = 1; bs.Parent = block
-    addStroke(bs)
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0, 8)
-    pad.PaddingBottom = UDim.new(0, 8)
-    pad.PaddingLeft = UDim.new(0, 12)
-    pad.PaddingRight = UDim.new(0, 12)
-    pad.Parent = block
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 4)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = block
-
-    local titleRow = Instance.new("Frame")
-    titleRow.Size = UDim2.new(1, 0, 0, 22); titleRow.BackgroundTransparency = 1
-    titleRow.Parent = block
-
-    local vLabel = Instance.new("TextLabel")
-    vLabel.Size = UDim2.new(1, -100, 1, 0)
-    vLabel.BackgroundTransparency = 1
-    vLabel.Text = "v" .. entry.version .. (entry.date ~= "" and ("  |  " .. entry.date) or "")
-    vLabel.TextSize = 13
-    vLabel.TextColor3 = Theme.Accent
-    vLabel.Font = Enum.Font.GothamBold
-    vLabel.TextXAlignment = Enum.TextXAlignment.Left
-    vLabel.Parent = titleRow
-    addFont(vLabel)
-
-    if entry.version == SCRIPT_VERSION then
-        local tag = Instance.new("TextLabel")
-        tag.Size = UDim2.new(0, 70, 1, 0); tag.Position = UDim2.new(1, -70, 0, 0)
-        tag.BackgroundColor3 = Color3.fromRGB(120, 230, 140)
-        tag.Text = "LATEST"
-        tag.TextColor3 = Color3.fromRGB(20, 40, 25)
-        tag.TextSize = 10
-        tag.Font = Enum.Font.GothamBold
-        tag.Parent = titleRow
-        addFont(tag)
-        local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(0, 4); tc.Parent = tag
-    end
-
-    for _, line in ipairs(entry.entries) do
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 18)
-        row.BackgroundTransparency = 1
-        row.Parent = block
-
-        local bullet = Instance.new("TextLabel")
-        bullet.Size = UDim2.new(0, 14, 1, 0)
-        bullet.BackgroundTransparency = 1
-        bullet.Text = "*"
-        bullet.TextSize = 12
-        bullet.TextColor3 = Theme.Accent
-        bullet.Parent = row
-        addFont(bullet)
-
-        local textLbl = Instance.new("TextLabel")
-        textLbl.Size = UDim2.new(1, -14, 1, 0); textLbl.Position = UDim2.new(0, 14, 0, 0)
-        textLbl.BackgroundTransparency = 1
-        textLbl.Text = line
-        textLbl.TextSize = 11
-        textLbl.TextColor3 = Theme.Text
-        textLbl.TextXAlignment = Enum.TextXAlignment.Left
-        textLbl.Parent = row
-        addFont(textLbl)
-        table.insert(ThemeRefs.text, {el=textLbl, p="TextColor3"})
-    end
-end
-
--- ============================================================
---  SAFE MODE TAB
--- ============================================================
-local safeWarningFrame = Instance.new("Frame")
-safeWarningFrame.Size = UDim2.new(1, 0, 0, 200); safeWarningFrame.BackgroundTransparency = 1
-safeWarningFrame.Parent = safeTab
-
-local swTitle = Instance.new("TextLabel")
-swTitle.Size = UDim2.new(1, 0, 0, 26); swTitle.Position = UDim2.new(0, 0, 0, 20)
-swTitle.BackgroundTransparency = 1
-swTitle.Text = "Are you sure?"
-swTitle.TextSize = 16
-swTitle.TextColor3 = Theme.Text
-swTitle.Font = Enum.Font.GothamBold
-swTitle.Parent = safeWarningFrame
-addFont(swTitle)
-
-local swWarn = Instance.new("TextLabel")
-swWarn.Size = UDim2.new(1, -20, 0, 60); swWarn.Position = UDim2.new(0, 10, 0, 55)
-swWarn.BackgroundTransparency = 1
-swWarn.Text = "By clicking Yes, you won't be able to use other cheats.\nOnly ESP (names), Freecam and Spectate will be available."
-swWarn.TextSize = 12
-swWarn.TextColor3 = Color3.fromRGB(220, 160, 160)
-swWarn.TextWrapped = true
-swWarn.Parent = safeWarningFrame
-addFont(swWarn)
-
-local swBtnRow = Instance.new("Frame")
-swBtnRow.Size = UDim2.new(1, 0, 0, 32); swBtnRow.Position = UDim2.new(0, 0, 0, 130)
-swBtnRow.BackgroundTransparency = 1
-swBtnRow.Parent = safeWarningFrame
-local swLayout = Instance.new("UIListLayout")
-swLayout.FillDirection = Enum.FillDirection.Horizontal
-swLayout.Padding = UDim.new(0, 8)
-swLayout.SortOrder = Enum.SortOrder.LayoutOrder
-swLayout.Parent = swBtnRow
-
-local swNoBtn = Instance.new("TextButton")
-swNoBtn.Size = UDim2.new(0.5, -4, 1, 0); swNoBtn.BorderSizePixel = 0
-swNoBtn.Text = "No"; swNoBtn.TextSize = 12; swNoBtn.AutoButtonColor = true
-swNoBtn.Parent = swBtnRow
-addBtn(swNoBtn); addText(swNoBtn); addFont(swNoBtn)
-local swNoC = Instance.new("UICorner"); swNoC.CornerRadius = UDim.new(0, 6); swNoC.Parent = swNoBtn
-
-local swYesBtn = Instance.new("TextButton")
-swYesBtn.Size = UDim2.new(0.5, -4, 1, 0); swYesBtn.BorderSizePixel = 0
-swYesBtn.Text = "Yes"; swYesBtn.TextSize = 12; swYesBtn.AutoButtonColor = true
-swYesBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-swYesBtn.TextColor3 = Color3.new(1, 1, 1)
-swYesBtn.Parent = swBtnRow
-addFont(swYesBtn)
-local swYesC = Instance.new("UICorner"); swYesC.CornerRadius = UDim.new(0, 6); swYesC.Parent = swYesBtn
-
-local safeActiveFrame = Instance.new("Frame")
-safeActiveFrame.Size = UDim2.new(1, 0, 0, 220); safeActiveFrame.BackgroundTransparency = 1
-safeActiveFrame.Visible = false
-safeActiveFrame.Parent = safeTab
-
--- ============================================================
---  MEGA HACKS TAB
--- ============================================================
-local megaPlaceholder = Instance.new("Frame")
-megaPlaceholder.Size = UDim2.new(1, 0, 0, 200); megaPlaceholder.BackgroundTransparency = 1
-megaPlaceholder.Visible = false
-megaPlaceholder.Parent = megaTab
-
-local mhTitle = Instance.new("TextLabel")
-mhTitle.Size = UDim2.new(1, 0, 0, 30); mhTitle.Position = UDim2.new(0, 0, 0, 40)
-mhTitle.BackgroundTransparency = 1
-mhTitle.Text = "Mega Hacks"
-mhTitle.TextSize = 20
-mhTitle.TextColor3 = Theme.Accent
-mhTitle.Font = Enum.Font.GothamBold
-mhTitle.Parent = megaPlaceholder
-addFont(mhTitle)
-
-local mhSub = Instance.new("TextLabel")
-mhSub.Size = UDim2.new(1, 0, 0, 24); mhSub.Position = UDim2.new(0, 0, 0, 80)
-mhSub.BackgroundTransparency = 1
-mhSub.Text = "Unlocked - features coming soon"
-mhSub.TextSize = 13
-mhSub.TextColor3 = Color3.fromRGB(150, 150, 150)
-mhSub.Parent = megaPlaceholder
-addFont(mhSub)
-
-local mhNote = Instance.new("TextLabel")
-mhNote.Size = UDim2.new(1, 0, 0, 40); mhNote.Position = UDim2.new(0, 0, 0, 120)
-mhNote.BackgroundTransparency = 1
-mhNote.Text = "For games without anti-cheat only"
-mhNote.TextSize = 11
-mhNote.TextColor3 = Color3.fromRGB(180, 120, 120)
-mhNote.TextWrapped = true
-mhNote.Parent = megaPlaceholder
-addFont(mhNote)
-
--- ============================================================
---  SAFE MODE FUNCTIONS
--- ============================================================
-local function activateSafeMode()
-    safeModeActive = true
-    safeConfirmGui.Enabled = false
-    local toHide = { "Game", "Game Customization", "Mega Hacks" }
-    for _, n in ipairs(toHide) do
-        if tabButtons[n] then
-            pcall(function() tabButtons[n]:Destroy() end)
-            tabButtons[n] = nil
-        end
-    end
-    safeWarningFrame.Visible = false
-    safeActiveFrame.Visible = true
-    if not safeActiveFrame:GetAttribute("Populated") then
-        safeActiveFrame:SetAttribute("Populated", true)
-        makeSectionHeader(safeActiveFrame, "SAFE MODE ACTIVE")
-        makeToggle(safeActiveFrame, "ESP (names only)",
-            function() return Config.ESP.Enabled end,
-            function(v)
-                Config.ESP.Enabled = v
-                Config.ESP.ShowName = true
-                Config.ESP.ShowHP = false
-                Config.ESP.ShowDistance = false
-            end)
-        makeSlider(safeActiveFrame, "Highlight distance", 50, 2000,
-            function() return Config.ESP.MaxDistForHighlight end,
-            function(v) Config.ESP.MaxDistForHighlight = v end, true)
-        makeToggle(safeActiveFrame, "Freecam",
-            function() return Config.Freecam.Enabled end,
-            function(v)
-                Config.Freecam.Enabled = v
-                if v then startFreecam() else stopFreecam() end
-            end)
-        makeToggle(safeActiveFrame, "Spectate",
-            function() return Spectate.Enabled end,
-            function(v)
-                if v then
-                    local list = getSpectateList()
-                    if #list > 0 then setSpectateTarget(list[1]) end
-                else stopSpectate() end
-            end)
-    end
-    switchTab("Safe Mode")
-end
-
-scYesBtn.MouseButton1Click:Connect(activateSafeMode)
-scNoBtn.MouseButton1Click:Connect(function() safeConfirmGui.Enabled = false end)
-safeConfirmBackdrop.MouseButton1Click:Connect(function() safeConfirmGui.Enabled = false end)
-swYesBtn.MouseButton1Click:Connect(activateSafeMode)
-swNoBtn.MouseButton1Click:Connect(function() switchTab("Customization") end)
-
--- ============================================================
---  MEGA HACKS FUNCTIONS
--- ============================================================
-local function unlockMegaHacks()
-    megaHacksUnlocked = true
-    megaPassGui.Enabled = false
-    megaPlaceholder.Visible = true
-    switchTab("Mega Hacks")
-end
-
-mpSubmitBtn.MouseButton1Click:Connect(function()
-    if mpBox.Text == MEGA_PASSWORD then unlockMegaHacks()
-    else mpErr.Text = "Wrong password"; mpBox.Text = "" end
-end)
-mpBox.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        if mpBox.Text == MEGA_PASSWORD then unlockMegaHacks()
-        else mpErr.Text = "Wrong password"; mpBox.Text = "" end
-    end
-end)
-mpCancelBtn.MouseButton1Click:Connect(function() megaPassGui.Enabled = false end)
-megaPassBackdrop.MouseButton1Click:Connect(function() megaPassGui.Enabled = false end)
 
 -- ============================================================
 --  TAB: CUSTOMIZATION
 -- ============================================================
 makeSectionHeader(customTab, "THEME COLORS")
-makeColorPicker(customTab, "Background", function() return Theme.Background end, function(c) Theme.Background = c; applyTheme() end)
-makeColorPicker(customTab, "Buttons", function() return Theme.Button end, function(c) Theme.Button = c; applyTheme() end)
-makeColorPicker(customTab, "Outline", function() return Theme.Outline end, function(c) Theme.Outline = c; applyTheme() end)
-makeColorPicker(customTab, "Accent", function() return Theme.Accent end, function(c) Theme.Accent = c; applyTheme() end)
-makeColorPicker(customTab, "Text", function() return Theme.Text end, function(c) Theme.Text = c; applyTheme() end)
 
+makeColorPicker(customTab, "Background",
+    function() return Theme.Background end,
+    function(c) Theme.Background = c; applyTheme() end)
+
+makeColorPicker(customTab, "Buttons",
+    function() return Theme.Button end,
+    function(c) Theme.Button = c; applyTheme() end)
+
+makeColorPicker(customTab, "Outline",
+    function() return Theme.Outline end,
+    function(c) Theme.Outline = c; applyTheme() end)
+
+makeColorPicker(customTab, "Accent",
+    function() return Theme.Accent end,
+    function(c) Theme.Accent = c; applyTheme() end)
+
+makeColorPicker(customTab, "Text",
+    function() return Theme.Text end,
+    function(c) Theme.Text = c; applyTheme() end)
+
+-- ============================================================
+--  FONT SELECTOR
+-- ============================================================
 makeSectionHeader(customTab, "FONT")
+
 local fontRow = Instance.new("Frame")
 fontRow.Size = UDim2.new(1, 0, 0, 26); fontRow.BackgroundTransparency = 1
 fontRow.Parent = customTab
@@ -2188,6 +1745,7 @@ fontRowLayout.FillDirection = Enum.FillDirection.Horizontal
 fontRowLayout.Padding = UDim.new(0, 4)
 fontRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 fontRowLayout.Parent = fontRow
+
 local fontButtons = {}
 local function syncFontButtons()
     for name, b in pairs(fontButtons) do
@@ -2200,6 +1758,7 @@ local function syncFontButtons()
         end
     end
 end
+
 for _, name in ipairs({"Ubuntu", "Calibri", "ComicSans", "Silkscreen"}) do
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0.25, -3, 1, 0)
@@ -2211,7 +1770,7 @@ for _, name in ipairs({"Ubuntu", "Calibri", "ComicSans", "Silkscreen"}) do
     b.Parent = fontRow
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = b
     table.insert(ThemeRefs.button, {el=b, p="BackgroundColor3"})
-    table.insert(ThemeRefs.text, {el=b, p="TextColor3"})
+    table.insert(ThemeRefs.text,   {el=b, p="TextColor3"})
     b.BackgroundColor3 = Theme.Button
     b.TextColor3 = Theme.Text
     fontButtons[name] = b
@@ -2252,22 +1811,11 @@ local function serializeValue(v)
 end
 
 local function saveConfig()
-    if not hasFileAPI then
-        warn("[Vagrant] writefile/readfile not available.")
-        notify("Vagrant Survival", "Save failed - no file API")
-        return false
-    end
+    if not hasFileAPI then warn("[Vagrant] writefile/readfile not available."); return false end
     local data = "return " .. serializeValue({ Config = Config, Theme = Theme })
     local ok = pcall(writefile, CONFIG_FILE, data)
-    if ok then
-        print("[Vagrant] Config saved.")
-        notify("Vagrant Survival", "Config saved successfully!")
-        return true
-    else
-        warn("[Vagrant] Save failed.")
-        notify("Vagrant Survival", "Save failed")
-        return false
-    end
+    if ok then print("[Vagrant] Config saved.") return true
+    else warn("[Vagrant] Save failed."); return false end
 end
 
 local function deepMerge(target, source)
@@ -2281,36 +1829,16 @@ local function deepMerge(target, source)
 end
 
 local function loadConfig()
-    if not hasFileAPI then
-        warn("[Vagrant] writefile/readfile not available.")
-        notify("Vagrant Survival", "Load failed - no file API")
-        return false
-    end
+    if not hasFileAPI then warn("[Vagrant] writefile/readfile not available."); return false end
     local ok1, exists = pcall(isfile, CONFIG_FILE)
-    if not ok1 or not exists then
-        warn("[Vagrant] Config file not found.")
-        notify("Vagrant Survival", "Config file not found")
-        return false
-    end
+    if not ok1 or not exists then warn("[Vagrant] Config file not found."); return false end
     local ok2, content = pcall(readfile, CONFIG_FILE)
-    if not ok2 or not content then
-        warn("[Vagrant] Could not read file.")
-        notify("Vagrant Survival", "Could not read file")
-        return false
-    end
+    if not ok2 or not content then warn("[Vagrant] Could not read file."); return false end
     local fn = loadstring or load
     local ok3, chunk = pcall(fn, content)
-    if not ok3 or not chunk then
-        warn("[Vagrant] Parse error.")
-        notify("Vagrant Survival", "Config parse error")
-        return false
-    end
+    if not ok3 or not chunk then warn("[Vagrant] Parse error."); return false end
     local ok4, data = pcall(chunk)
-    if not ok4 or type(data) ~= "table" then
-        warn("[Vagrant] Config corrupted.")
-        notify("Vagrant Survival", "Config corrupted")
-        return false
-    end
+    if not ok4 or type(data) ~= "table" then warn("[Vagrant] Config corrupted."); return false end
     if data.Config then deepMerge(Config, data.Config) end
     if data.Theme then deepMerge(Theme, data.Theme) end
 
@@ -2321,6 +1849,7 @@ local function loadConfig()
 
     if Config.Freecam.Enabled then startFreecam() else stopFreecam() end
 
+    -- cursor
     if Config.Cursor.Enabled and Config.Cursor.ImageId ~= "" then
         applyCursorImage(Config.Cursor.ImageId)
         if cursorImage then cursorImage.Visible = true end
@@ -2338,11 +1867,11 @@ local function loadConfig()
     syncAll()
     syncFontButtons()
     print("[Vagrant] Config loaded.")
-    notify("Vagrant Survival", "Config loaded successfully!")
     return true
 end
 
 makeSectionHeader(customTab, "CONFIG")
+
 local cfgRow1 = Instance.new("Frame")
 cfgRow1.Size = UDim2.new(1, 0, 0, 26); cfgRow1.BackgroundTransparency = 1
 cfgRow1.Parent = customTab
@@ -2350,6 +1879,7 @@ local r1l = Instance.new("UIListLayout")
 r1l.FillDirection = Enum.FillDirection.Horizontal
 r1l.Padding = UDim.new(0, 6); r1l.SortOrder = Enum.SortOrder.LayoutOrder
 r1l.Parent = cfgRow1
+
 makeSmallBtn(cfgRow1, "Save", function() saveConfig() end)
 makeSmallBtn(cfgRow1, "Load", function() loadConfig() end)
 
@@ -2360,10 +1890,12 @@ local r2l = Instance.new("UIListLayout")
 r2l.FillDirection = Enum.FillDirection.Horizontal
 r2l.Padding = UDim.new(0, 6); r2l.SortOrder = Enum.SortOrder.LayoutOrder
 r2l.Parent = cfgRow2
+
 makeSmallBtn(cfgRow2, "Reset Theme", function()
     for k, v in pairs(DEFAULT_THEME) do Theme[k] = v end
     applyTheme()
 end)
+
 makeSmallBtn(cfgRow2, "Reset All", function()
     for k, v in pairs(DEFAULT_THEME) do Theme[k] = v end
     Config.ESP.Enabled = false
@@ -2402,6 +1934,7 @@ cfgHelp.TextWrapped = true; cfgHelp.Parent = customTab
 addFont(cfgHelp)
 
 makeSectionHeader(customTab, "CUSTOM CURSOR")
+
 makeToggle(customTab, "Cursor Enabled",
     function() return Config.Cursor.Enabled end,
     function(v) Config.Cursor.Enabled = v end,
@@ -2414,17 +1947,20 @@ makeToggle(customTab, "Cursor Enabled",
             setDefaultCursorVisible(true)
         end
     end)
+
 makeToggle(customTab, "Hide Default Cursor",
     function() return Config.Cursor.HideDefault end,
     function(v) Config.Cursor.HideDefault = v end,
     function(v)
         if Config.Cursor.Enabled then setDefaultCursorVisible(not v) else setDefaultCursorVisible(true) end
     end)
+
 makeTextBox(customTab, "Image ID",
     function() return Config.Cursor.ImageId end,
     function(v) Config.Cursor.ImageId = v end,
     function(text) applyCursorImage(text) end,
     "e.g. 6031097225")
+
 makeSlider(customTab, "Size (px)", 8, 128,
     function() return Config.Cursor.Size end,
     function(v) Config.Cursor.Size = v end, true,
@@ -2478,6 +2014,7 @@ local function syncAimParts()
         end
     end
 end
+
 for _, opt in ipairs({"Head", "Torso"}) do
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0.5, -2, 1, 0); b.BorderSizePixel = 0
@@ -2524,48 +2061,56 @@ makeSlider(gameTab, "Min height diff (studs)", 1, 20,
     function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
 
 makeSectionHeader(gameTab, "LOOK-AWAY (Anti-Aim)")
+
 makeToggle(gameTab, "Look-Away Enabled",
     function() return Config.LookAway.Enabled end,
     function(v) Config.LookAway.Enabled = v end)
+
 makeSlider(gameTab, "Trigger radius (px)", 5, 150,
     function() return Config.LookAway.Radius end,
     function(v) Config.LookAway.Radius = v end, true)
-makeSlider(gameTab, "Push strength", 1, 60,
+
+makeSlider(gameTab, "Push strength (px/frame)", 1, 60,
     function() return Config.LookAway.Strength end,
     function(v) Config.LookAway.Strength = v end, true)
+
 makeSlider(gameTab, "Max distance (studs)", 50, 2000,
     function() return Config.LookAway.MaxDistance end,
     function(v) Config.LookAway.MaxDistance = v end, true)
 
 local lookAwayHelp = Instance.new("TextLabel")
 lookAwayHelp.Size = UDim2.new(1, 0, 0, 32); lookAwayHelp.BackgroundTransparency = 1
-lookAwayHelp.Text = "Works only in shift-lock / first-person.\nCamera rotates away from players on crosshair."
+lookAwayHelp.Text = "Works only in shift-lock / first-person.\nCursor is repelled away from players on crosshair."
 lookAwayHelp.TextColor3 = Color3.fromRGB(150, 150, 150)
 lookAwayHelp.TextSize = 10
 lookAwayHelp.TextWrapped = true; lookAwayHelp.Parent = gameTab
 addFont(lookAwayHelp)
 
 makeSectionHeader(gameTab, "FREECAM")
+
 makeToggle(gameTab, "Freecam Enabled",
     function() return Config.Freecam.Enabled end,
     function(v) Config.Freecam.Enabled = v end,
     function(v) if v then startFreecam() else stopFreecam() end end)
+
 makeSlider(gameTab, "Flight speed", 0.2, 5.0,
     function() return Config.Freecam.Speed end,
     function(v) Config.Freecam.Speed = v end, false)
+
 makeSlider(gameTab, "Mouse sensitivity", 0.0005, 0.01,
     function() return Config.Freecam.Sensitivity end,
     function(v) Config.Freecam.Sensitivity = v end, false)
 
 local freecamHelp = Instance.new("TextLabel")
 freecamHelp.Size = UDim2.new(1, 0, 0, 34); freecamHelp.BackgroundTransparency = 1
-freecamHelp.Text = "WASD - fly | Space - up | LeftCtrl - down\nLeftShift - boost | RMB - rotate camera"
+freecamHelp.Text = "WASD — fly • Space — up • LeftCtrl — down\nLeftShift — boost • RMB — rotate camera"
 freecamHelp.TextColor3 = Color3.fromRGB(150, 150, 150)
 freecamHelp.TextSize = 10
 freecamHelp.TextWrapped = true; freecamHelp.Parent = gameTab
 addFont(freecamHelp)
 
 makeSectionHeader(gameTab, "SPECTATE")
+
 makeToggle(gameTab, "Spectate Enabled",
     function() return Spectate.Enabled end,
     function(v)
@@ -2575,6 +2120,7 @@ makeToggle(gameTab, "Spectate Enabled",
         else stopSpectate() end
     end,
     function() if refreshSpectateList then refreshSpectateList() end end)
+
 makeToggle(gameTab, "Auto-switch on death",
     function() return Config.Spectate.AutoSwitchOnDeath end,
     function(v) Config.Spectate.AutoSwitchOnDeath = v end)
@@ -2586,8 +2132,9 @@ local sbLayout = Instance.new("UIListLayout")
 sbLayout.FillDirection = Enum.FillDirection.Horizontal
 sbLayout.Padding = UDim.new(0, 6); sbLayout.SortOrder = Enum.SortOrder.LayoutOrder
 sbLayout.Parent = specBtnRow
-makeSmallBtn(specBtnRow, "< Prev", function() spectateNext(-1); refreshSpectateList() end)
-makeSmallBtn(specBtnRow, "Next >", function() spectateNext(1); refreshSpectateList() end)
+
+makeSmallBtn(specBtnRow, "◀ Prev", function() spectateNext(-1); refreshSpectateList() end)
+makeSmallBtn(specBtnRow, "Next ▶", function() spectateNext(1); refreshSpectateList() end)
 
 local specListFrame = Instance.new("Frame")
 specListFrame.Size = UDim2.new(1, 0, 0, 0); specListFrame.AutomaticSize = Enum.AutomaticSize.Y
@@ -2633,7 +2180,7 @@ function refreshSpectateList()
         local nl = Instance.new("TextLabel")
         nl.Size = UDim2.new(1, -110, 1, 0); nl.Position = UDim2.new(0, 8, 0, 0)
         nl.BackgroundTransparency = 1
-        nl.Text = (isTarget and "> " or "") .. p.Name .. (inWl and "  [WL]" or "")
+        nl.Text = (isTarget and "▶ " or "") .. p.Name .. (inWl and "  [WL]" or "")
         nl.TextColor3 = Theme.Text; nl.TextSize = 11
         nl.TextXAlignment = Enum.TextXAlignment.Left; nl.Parent = btn
         addFont(nl)
@@ -2672,12 +2219,14 @@ function refreshSpectateList()
 end
 
 refreshSpectateList()
+
 Players.PlayerAdded:Connect(function()
     task.wait(1); refreshSpectateList(); if refreshWhitelistUI then refreshWhitelistUI() end
 end)
 Players.PlayerRemoving:Connect(function()
     task.wait(0.1); refreshSpectateList(); if refreshWhitelistUI then refreshWhitelistUI() end
 end)
+
 task.spawn(function()
     while true do
         task.wait(1)
@@ -2689,28 +2238,35 @@ end)
 --  TAB: GAME CUSTOMIZATION
 -- ============================================================
 makeSectionHeader(gameCustTab, "ESP")
+
 makeToggle(gameCustTab, "ESP Enabled",
     function() return Config.ESP.Enabled end,
     function(v) Config.ESP.Enabled = v end)
+
 makeSlider(gameCustTab, "Highlight distance", 50, 2000,
     function() return Config.ESP.MaxDistForHighlight end,
     function(v) Config.ESP.MaxDistForHighlight = v end, true)
+
 makeSlider(gameCustTab, "Text size", 8, 32,
     function() return Config.ESP.TextSize end,
     function(v) Config.ESP.TextSize = v end, true)
 
-makeSectionHeader(gameCustTab, "ESP - ELEMENTS")
+makeSectionHeader(gameCustTab, "ESP — ELEMENTS")
+
 makeToggle(gameCustTab, "Show Name",
     function() return Config.ESP.ShowName end,
     function(v) Config.ESP.ShowName = v end)
+
 makeToggle(gameCustTab, "Show HP",
     function() return Config.ESP.ShowHP end,
     function(v) Config.ESP.ShowHP = v end)
+
 makeToggle(gameCustTab, "Show Distance",
     function() return Config.ESP.ShowDistance end,
     function(v) Config.ESP.ShowDistance = v end)
 
-makeSectionHeader(gameCustTab, "ESP - TRACERS")
+makeSectionHeader(gameCustTab, "ESP — TRACERS")
+
 makeToggle(gameCustTab, "Tracers Enabled",
     function() return Config.ESP.ShowTracers end,
     function(v)
@@ -2719,6 +2275,7 @@ makeToggle(gameCustTab, "Tracers Enabled",
             for player, _ in pairs(tracerLines) do hideTracer(player) end
         end
     end)
+
 makeSlider(gameCustTab, "Tracer thickness", 1, 5,
     function() return Config.ESP.TracerThickness end,
     function(v) Config.ESP.TracerThickness = v end,
@@ -2726,6 +2283,7 @@ makeSlider(gameCustTab, "Tracer thickness", 1, 5,
     function(v)
         for _, line in pairs(tracerLines) do line.Thickness = v end
     end)
+
 makeColorPicker(gameCustTab, "Tracer color",
     function() return Config.ESP.TracerColor end,
     function(c)
@@ -2733,19 +2291,24 @@ makeColorPicker(gameCustTab, "Tracer color",
         for _, line in pairs(tracerLines) do line.Color = c end
     end)
 
-makeSectionHeader(gameCustTab, "ESP - COLORS")
+makeSectionHeader(gameCustTab, "ESP — COLORS")
+
 makeColorPicker(gameCustTab, "Name color",
     function() return Config.ESP.NameColor end,
     function(c) Config.ESP.NameColor = c end)
+
 makeColorPicker(gameCustTab, "HP color",
     function() return Config.ESP.HPColor end,
     function(c) Config.ESP.HPColor = c end)
+
 makeColorPicker(gameCustTab, "Distance color",
     function() return Config.ESP.DistanceColor end,
     function(c) Config.ESP.DistanceColor = c end)
+
 makeColorPicker(gameCustTab, "Highlight fill color",
     function() return Config.ESP.HighlightColor end,
     function(c) Config.ESP.HighlightColor = c end)
+
 makeColorPicker(gameCustTab, "Highlight outline color",
     function() return Config.ESP.OutlineColor end,
     function(c) Config.ESP.OutlineColor = c end)
@@ -2756,7 +2319,7 @@ makeToggle(gameCustTab, "No Shadows",
     function(v) Config.NoShadows.Enabled = v end,
     function() applyNoShadows() end)
 
-makeSectionHeader(gameCustTab, "WHITELIST - Aim ignores these players")
+makeSectionHeader(gameCustTab, "WHITELIST — Aim ignores these players")
 
 local wlListFrame
 local refreshWhitelistUI
@@ -2808,10 +2371,12 @@ refreshWhitelistUI = function()
         row.Size = UDim2.new(1, 0, 0, 20); row.BorderSizePixel = 0; row.Parent = wlListFrame
         addBtn(row)
         local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 4); rc.Parent = row
+
         local inGame = false
         for _, p in ipairs(Players:GetPlayers()) do
             if p.Name == name then inGame = true; break end
         end
+
         local nl = Instance.new("TextLabel")
         nl.Size = UDim2.new(1, -40, 1, 0); nl.Position = UDim2.new(0, 8, 0, 0)
         nl.BackgroundTransparency = 1
@@ -2820,6 +2385,7 @@ refreshWhitelistUI = function()
         nl.TextColor3 = inGame and Theme.Text or Color3.fromRGB(150, 150, 150)
         nl.TextXAlignment = Enum.TextXAlignment.Left; nl.Parent = row
         addFont(nl)
+
         local rb = Instance.new("TextButton")
         rb.Size = UDim2.new(0, 20, 0, 16); rb.Position = UDim2.new(1, -22, 0, 2)
         rb.BackgroundColor3 = Color3.fromRGB(120, 40, 40); rb.BorderSizePixel = 0
@@ -2827,6 +2393,7 @@ refreshWhitelistUI = function()
         rb.TextSize = 11; rb.Parent = row
         addFont(rb)
         local rbc = Instance.new("UICorner"); rbc.CornerRadius = UDim.new(0, 4); rbc.Parent = rb
+
         rb.MouseButton1Click:Connect(function()
             Config.Aim.Whitelist[name] = nil
             refreshWhitelistUI()
@@ -2857,10 +2424,11 @@ makeTrioBtn(wlBtnRow, "Clear", function()
     Config.Aim.Whitelist = {}
     refreshWhitelistUI(); if refreshSpectateList then refreshSpectateList() end
 end)
+
 refreshWhitelistUI()
 
 -- ============================================================
---  F1 TOGGLE MENU
+--  F1 — TOGGLE MENU
 -- ============================================================
 local menuOpen = true
 local function setMenuOpen(state)
@@ -2885,4 +2453,4 @@ task.spawn(function()
     loadConfig()
 end)
 
-print("[Vagrant Survival Best Script by Dokoo2] v" .. SCRIPT_VERSION .. " loaded. F1 to toggle menu.")
+print("[Vagrant Survival Best Script by Dokoo2] Loaded. F1 to toggle menu.")
