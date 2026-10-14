@@ -1,10 +1,52 @@
 -- ============================================================
 --   Vagrant Survival Best Script
 --   by Dokoo2
+--   Version 2.1
 -- ============================================================
 
 -- ============================================================
---  SINGLE-INSTANCE GUARD (blocks 2nd run + Roblox notification)
+--  SCRIPT VERSION & CHANGELOG
+-- ============================================================
+local SCRIPT_VERSION = "2.1"
+
+local CHANGELOG = {
+    {
+        version = "2.1",
+        date = "Latest",
+        entries = {
+            "New tab: Last Updates (this changelog)",
+            "Fixed Aim — now works in shift-lock / first-person",
+            "Look-Away reworked — rotates camera instead of cursor",
+            "Aim smoothness now uses Lerp in locked camera mode",
+        },
+    },
+    {
+        version = "2.0",
+        date = "",
+        entries = {
+            "Safe Mode tab — confirmed access, locks other tabs",
+            "Safe Mode: ESP (names only) + Freecam + Spectate",
+            "Mega Hacks tab — password protected",
+            "Single-instance guard — can't run twice",
+            "Custom cursor now stays on top of everything",
+            "Cursor keep-alive every 1 second",
+        },
+    },
+    {
+        version = "1.9",
+        date = "",
+        entries = {
+            "Look-Away (anti-aim) feature added",
+            "ESP Tracers (lines to players) with color picker",
+            "Color picker rebuilt — HSV wheel + RGB + hex",
+            "Per-element ESP colors (name / HP / distance)",
+            "Highlight fill & outline color pickers",
+        },
+    },
+}
+
+-- ============================================================
+--  SINGLE-INSTANCE GUARD
 -- ============================================================
 if _G.VagrantScriptLoaded then
     pcall(function()
@@ -66,7 +108,7 @@ local function showSplash()
 
     local sub = Instance.new("TextLabel")
     sub.Size = UDim2.new(1, 0, 0, 16); sub.Position = UDim2.new(0, 0, 0, 40)
-    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2"
+    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2  •  v" .. SCRIPT_VERSION
     sub.TextColor3 = Color3.fromRGB(150, 100, 220); sub.Font = Enum.Font.Ubuntu; sub.TextSize = 11
     sub.Parent = card
 
@@ -154,6 +196,12 @@ local Config = {
         VerticalBlockMinHeight = 3,
         Whitelist = {},
     },
+    LookAway = {
+        Enabled = false,
+        Radius = 40,
+        Strength = 20,
+        MaxDistance = 300,
+    },
     NoShadows = { Enabled = false },
     InfiniteJump = { Enabled = false },
     Cursor = { Enabled = false, ImageId = "", Size = 32, HideDefault = true },
@@ -161,6 +209,13 @@ local Config = {
     Freecam = { Enabled = false, Speed = 1.0, Sensitivity = 0.0025 },
     Font = "Ubuntu",
 }
+
+-- ============================================================
+--  STATE
+-- ============================================================
+local safeModeActive = false
+local megaHacksUnlocked = false
+local MEGA_PASSWORD = "X1k*2j7W+1"
 
 -- ============================================================
 --  FONTS
@@ -228,21 +283,48 @@ end
 -- ============================================================
 --  CUSTOM CURSOR
 -- ============================================================
-local cursorGui = Instance.new("ScreenGui")
-cursorGui.Name = "VagrantCursor"
-cursorGui.ResetOnSpawn = false
-cursorGui.IgnoreGuiInset = false
-cursorGui.DisplayOrder = 999
-cursorGui.Parent = guiParent
+local CursorCfg = Config.Cursor
 
-local cursorImage = Instance.new("ImageLabel")
-cursorImage.Name = "CursorImage"
-cursorImage.Size = UDim2.new(0, Config.Cursor.Size, 0, Config.Cursor.Size)
-cursorImage.AnchorPoint = Vector2.new(0.5, 0.5)
-cursorImage.BackgroundTransparency = 1
-cursorImage.ZIndex = 999
-cursorImage.Visible = false
-cursorImage.Parent = cursorGui
+local function getHighestGuiParent()
+    if type(gethui) == "function" then
+        local ok, hui = pcall(gethui)
+        if ok and hui then return hui end
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local cursorGui, cursorImage
+
+local function createCursorGui()
+    if cursorGui then pcall(function() cursorGui:Destroy() end) end
+    local pg = getHighestGuiParent()
+    if pg:FindFirstChild("VagrantCursor") then
+        pcall(function() pg.VagrantCursor:Destroy() end)
+    end
+
+    cursorGui = Instance.new("ScreenGui")
+    cursorGui.Name = "VagrantCursor"
+    cursorGui.ResetOnSpawn = false
+    cursorGui.IgnoreGuiInset = false
+    cursorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    cursorGui.DisplayOrder = 2147483647
+    pcall(function() cursorGui.Parent = pg end)
+
+    cursorImage = Instance.new("ImageLabel")
+    cursorImage.Name = "CursorImage"
+    cursorImage.Size = UDim2.new(0, CursorCfg.Size, 0, CursorCfg.Size)
+    cursorImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    cursorImage.BackgroundTransparency = 1
+    cursorImage.ZIndex = 2147483647
+    cursorImage.Visible = false
+    cursorImage.Parent = cursorGui
+
+    if CursorCfg.ImageId ~= "" then
+        cursorImage.Image = CursorCfg.ImageId
+    end
+end
+
+createCursorGui()
 
 local function setDefaultCursorVisible(visible)
     pcall(function() UserInputService.MouseIconEnabled = visible end)
@@ -250,8 +332,8 @@ end
 
 local function applyCursorImage(id)
     if not id or id == "" then
-        cursorImage.Image = ""
-        cursorImage.Visible = false
+        if cursorImage then cursorImage.Image = "" end
+        CursorCfg.ImageId = ""
         return
     end
     local cleanId = tostring(id):gsub("%s", "")
@@ -259,18 +341,44 @@ local function applyCursorImage(id)
     if cleanId:find("rbxassetid://") then url = cleanId
     elseif cleanId:find("^%d+$") then url = "rbxassetid://" .. cleanId
     else url = cleanId end
-    cursorImage.Image = url
-    Config.Cursor.ImageId = cleanId
+    CursorCfg.ImageId = url
+    if cursorImage then cursorImage.Image = url end
 end
 
 RunService.RenderStepped:Connect(function()
-    if not Config.Cursor.Enabled or Config.Cursor.ImageId == "" then
-        cursorImage.Visible = false
+    if not CursorCfg.Enabled or CursorCfg.ImageId == "" then
+        if cursorImage then cursorImage.Visible = false end
         return
     end
+    if not cursorImage or not cursorImage.Parent then return end
     cursorImage.Visible = true
     cursorImage.Position = UDim2.new(0, Mouse.X, 0, Mouse.Y)
-    cursorImage.Size = UDim2.new(0, Config.Cursor.Size, 0, Config.Cursor.Size)
+    cursorImage.Size = UDim2.new(0, CursorCfg.Size, 0, CursorCfg.Size)
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if CursorCfg.Enabled then
+            local pg = getHighestGuiParent()
+            if not cursorGui or not cursorGui.Parent or cursorGui.Parent ~= pg then
+                createCursorGui()
+            end
+            pcall(function() cursorGui.DisplayOrder = 2147483647 end)
+            if cursorImage then
+                pcall(function() cursorImage.ZIndex = 2147483647 end)
+                if cursorImage.Image ~= CursorCfg.ImageId and CursorCfg.ImageId ~= "" then
+                    cursorImage.Image = CursorCfg.ImageId
+                end
+            end
+            if CursorCfg.HideDefault then
+                pcall(function() UserInputService.MouseIconEnabled = false end)
+            end
+            if cursorImage and CursorCfg.ImageId ~= "" then
+                cursorImage.Visible = true
+            end
+        end
+    end
 end)
 
 -- ============================================================
@@ -792,14 +900,18 @@ end
 
 local function buildESPLabelText(player, humanoid, distance)
     local lines = {}
-    if Config.ESP.ShowName then
+    local showName = Config.ESP.ShowName or safeModeActive
+    local showHP = Config.ESP.ShowHP and not safeModeActive
+    local showDist = Config.ESP.ShowDistance and not safeModeActive
+
+    if showName then
         table.insert(lines, string.format('<font color="%s">%s</font>', colorToRichTag(Config.ESP.NameColor), player.Name))
     end
-    if Config.ESP.ShowHP then
+    if showHP then
         table.insert(lines, string.format('<font color="%s">HP: %d/%d</font>',
             colorToRichTag(Config.ESP.HPColor), math.floor(humanoid.Health), math.floor(humanoid.MaxHealth)))
     end
-    if Config.ESP.ShowDistance then
+    if showDist then
         table.insert(lines, string.format('<font color="%s">Distance: %d studs</font>',
             colorToRichTag(Config.ESP.DistanceColor), math.floor(distance)))
     end
@@ -835,7 +947,7 @@ local function updateESP(player)
         if espHighlights[player] then espHighlights[player]:Destroy(); espHighlights[player] = nil end
     end
 
-    local anyText = Config.ESP.ShowName or Config.ESP.ShowHP or Config.ESP.ShowDistance
+    local anyText = Config.ESP.ShowName or Config.ESP.ShowHP or Config.ESP.ShowDistance or safeModeActive
     if not anyText then
         if espBillboards[player] then espBillboards[player]:Destroy(); espBillboards[player] = nil end
         return
@@ -893,7 +1005,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2: AIM
+--  BLOCK 2: AIM (with shift-lock support)
 -- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
@@ -950,6 +1062,18 @@ local function getClosestPlayerToCursor()
     local mousePos = UserInputService:GetMouseLocation()
     local cameraPos = Camera.CFrame.Position
     local cameraLook = Camera.CFrame.LookVector
+    local viewport = Camera.ViewportSize
+    local cx, cy = viewport.X / 2, viewport.Y / 2
+
+    -- In shift-lock, "cursor" = center of screen
+    local refX, refY
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+       or LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
+        refX, refY = cx, cy
+    else
+        refX, refY = mousePos.X, mousePos.Y
+    end
+
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
         local character = player.Character
@@ -965,7 +1089,7 @@ local function getClosestPlayerToCursor()
         if cameraLook:Dot(dirUnit) < Config.Aim.MinDot then continue end
         local screenPos = getScreenPoint(bodyPart)
         if not screenPos then continue end
-        local d = (screenPos - mousePos).Magnitude
+        local d = (screenPos - Vector2.new(refX, refY)).Magnitude
         if d < shortDist then shortDist = d; closest = player end
     end
     return closest
@@ -973,23 +1097,84 @@ end
 
 local hasMouseMoveRel = type(mousemoverel) == "function"
 
+local function isLockedCamera()
+    return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+        or LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson
+end
+
 RunService.RenderStepped:Connect(function()
-    if not Config.Aim.Enabled or not hasMouseMoveRel then return end
+    if not Config.Aim.Enabled then return end
+    if safeModeActive then return end
     if isTargetDirectlyAboveOrBelow() then return end
+
     local target = getClosestPlayerToCursor()
     if not target then return end
     local character = target.Character
     if not character then return end
     local bodyPart = getAimPart(character)
     if not bodyPart then return end
-    local screenPos = getScreenPoint(bodyPart)
-    if not screenPos then return end
-    local mousePos = UserInputService:GetMouseLocation()
-    local dx, dy = screenPos.X - mousePos.X, screenPos.Y - mousePos.Y
-    if math.abs(dx) < 1 and math.abs(dy) < 1 then return end
-    local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
-    local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
-    mousemoverel(mx, my)
+
+    if isLockedCamera() then
+        -- Rotate camera directly (shift-lock / first-person)
+        local currentCF = Camera.CFrame
+        local targetCF = CFrame.lookAt(currentCF.Position, bodyPart.Position)
+        Camera.CFrame = currentCF:Lerp(targetCF, Config.Aim.Smoothness)
+    else
+        -- Move mouse (normal mode)
+        if not hasMouseMoveRel then return end
+        local screenPos = getScreenPoint(bodyPart)
+        if not screenPos then return end
+        local mousePos = UserInputService:GetMouseLocation()
+        local dx, dy = screenPos.X - mousePos.X, screenPos.Y - mousePos.Y
+        if math.abs(dx) < 1 and math.abs(dy) < 1 then return end
+        local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
+        local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
+        mousemoverel(mx, my)
+    end
+end)
+
+-- ============================================================
+--  BLOCK 2.5: LOOK-AWAY (rotates camera in locked mode)
+-- ============================================================
+local LOOK_AWAY_ANGLE_SCALE = 0.0015
+
+RunService.RenderStepped:Connect(function()
+    if not Config.LookAway.Enabled then return end
+    if safeModeActive then return end
+    if not isLockedCamera() then return end
+
+    local viewport = Camera.ViewportSize
+    local cx, cy = viewport.X / 2, viewport.Y / 2
+    local cameraPos = Camera.CFrame.Position
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local character = player.Character
+        if not character or not character.Parent then continue end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not humanoid or not rootPart then continue end
+        if humanoid.Health <= 0 then continue end
+
+        local worldDist = (rootPart.Position - cameraPos).Magnitude
+        if worldDist > Config.LookAway.MaxDistance then continue end
+
+        local targetPart = character:FindFirstChild("Head") or rootPart
+        local sp, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+        if not onScreen or sp.Z <= 0 then continue end
+
+        local dx = sp.X - cx
+        local dy = sp.Y - cy
+        local dist = math.sqrt(dx * dx + dy * dy)
+        if dist > Config.LookAway.Radius then continue end
+        if dist < 0.1 then dx, dy, dist = 1, 0, 1 end
+
+        local strength = Config.LookAway.Strength * LOOK_AWAY_ANGLE_SCALE
+        local yawOffset = -(dx / dist) * strength
+        local pitchOffset = -(dy / dist) * strength
+
+        Camera.CFrame = Camera.CFrame * CFrame.Angles(pitchOffset, yawOffset, 0)
+    end
 end)
 
 -- ============================================================
@@ -1276,7 +1461,7 @@ table.insert(ThemeRefs.text, {el=titleLbl, p="TextColor3"})
 local subtitleLbl = Instance.new("TextLabel")
 subtitleLbl.Size = UDim2.new(1, -12, 0, 16); subtitleLbl.Position = UDim2.new(0, 12, 0, 26)
 subtitleLbl.BackgroundTransparency = 1
-subtitleLbl.Text = "by Dokoo2  •  Press F1 to close / open the menu"
+subtitleLbl.Text = "by Dokoo2  •  v" .. SCRIPT_VERSION .. "  •  F1 to close / open"
 subtitleLbl.TextSize = 10
 subtitleLbl.TextTransparency = 0.2
 subtitleLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -1532,9 +1717,156 @@ local function makeColorPicker(parent, name, getter, setter)
 end
 
 -- ============================================================
+--  POPUPS
+-- ============================================================
+local function makePopup(title, width, height)
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "VagrantPopup_" .. title
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 500
+    gui.Enabled = false
+    gui.Parent = guiParent
+
+    local backdrop = Instance.new("TextButton")
+    backdrop.Size = UDim2.new(1, 0, 1, 0)
+    backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
+    backdrop.BackgroundTransparency = 0.4
+    backdrop.BorderSizePixel = 0
+    backdrop.Text = ""
+    backdrop.AutoButtonColor = false
+    backdrop.Parent = gui
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(0, width, 0, height)
+    card.Position = UDim2.new(0.5, -width/2, 0.5, -height/2)
+    card.BorderSizePixel = 0
+    card.Active = true
+    card.Parent = gui
+    addPanel(card)
+    local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 10); cc.Parent = card
+    local cs = Instance.new("UIStroke"); cs.Thickness = 1.5; cs.Parent = card
+    addStroke(cs)
+
+    return gui, backdrop, card
+end
+
+-- Safe Mode confirm popup
+local safeConfirmGui, safeConfirmBackdrop, safeConfirmCard = makePopup("SafeModeConfirm", 400, 180)
+
+local scTitle = Instance.new("TextLabel")
+scTitle.Size = UDim2.new(1, -20, 0, 28); scTitle.Position = UDim2.new(0, 10, 0, 10)
+scTitle.BackgroundTransparency = 1
+scTitle.Text = "Are you sure?"
+scTitle.TextSize = 15
+scTitle.TextColor3 = Theme.Text
+scTitle.Font = Enum.Font.GothamBold
+scTitle.Parent = safeConfirmCard
+addFont(scTitle)
+
+local scWarn = Instance.new("TextLabel")
+scWarn.Size = UDim2.new(1, -20, 0, 60); scWarn.Position = UDim2.new(0, 10, 0, 44)
+scWarn.BackgroundTransparency = 1
+scWarn.Text = "By clicking Yes, you won't be able to use other cheats."
+scWarn.TextSize = 12
+scWarn.TextColor3 = Color3.fromRGB(220, 160, 160)
+scWarn.TextWrapped = true
+scWarn.Parent = safeConfirmCard
+addFont(scWarn)
+
+local scBtnRow = Instance.new("Frame")
+scBtnRow.Size = UDim2.new(1, -20, 0, 32); scBtnRow.Position = UDim2.new(0, 10, 1, -42)
+scBtnRow.BackgroundTransparency = 1
+scBtnRow.Parent = safeConfirmCard
+local scLayout = Instance.new("UIListLayout")
+scLayout.FillDirection = Enum.FillDirection.Horizontal
+scLayout.Padding = UDim.new(0, 8)
+scLayout.SortOrder = Enum.SortOrder.LayoutOrder
+scLayout.Parent = scBtnRow
+
+local scNoBtn = Instance.new("TextButton")
+scNoBtn.Size = UDim2.new(0.5, -4, 1, 0); scNoBtn.BorderSizePixel = 0
+scNoBtn.Text = "No"; scNoBtn.TextSize = 12; scNoBtn.AutoButtonColor = true
+scNoBtn.Parent = scBtnRow
+addBtn(scNoBtn); addText(scNoBtn); addFont(scNoBtn)
+local scNoC = Instance.new("UICorner"); scNoC.CornerRadius = UDim.new(0, 6); scNoC.Parent = scNoBtn
+
+local scYesBtn = Instance.new("TextButton")
+scYesBtn.Size = UDim2.new(0.5, -4, 1, 0); scYesBtn.BorderSizePixel = 0
+scYesBtn.Text = "Yes"; scYesBtn.TextSize = 12; scYesBtn.AutoButtonColor = true
+scYesBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+scYesBtn.TextColor3 = Color3.new(1, 1, 1)
+scYesBtn.Parent = scBtnRow
+addFont(scYesBtn)
+local scYesC = Instance.new("UICorner"); scYesC.CornerRadius = UDim.new(0, 6); scYesC.Parent = scYesBtn
+
+-- Mega Hacks password popup
+local megaPassGui, megaPassBackdrop, megaPassCard = makePopup("MegaHacksPassword", 400, 180)
+
+local mpTitle = Instance.new("TextLabel")
+mpTitle.Size = UDim2.new(1, -20, 0, 28); mpTitle.Position = UDim2.new(0, 10, 0, 10)
+mpTitle.BackgroundTransparency = 1
+mpTitle.Text = "Password Required"
+mpTitle.TextSize = 15
+mpTitle.TextColor3 = Theme.Text
+mpTitle.Font = Enum.Font.GothamBold
+mpTitle.Parent = megaPassCard
+addFont(mpTitle)
+
+local mpBox = Instance.new("TextBox")
+mpBox.Size = UDim2.new(1, -20, 0, 32); mpBox.Position = UDim2.new(0, 10, 0, 48)
+mpBox.BackgroundColor3 = Theme.Background
+mpBox.BorderSizePixel = 0
+mpBox.PlaceholderText = "Enter password..."
+mpBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+mpBox.Text = ""
+mpBox.TextColor3 = Theme.Text
+mpBox.TextSize = 12
+mpBox.ClearTextOnFocus = false
+mpBox.Parent = megaPassCard
+addFont(mpBox)
+local mpBoxC = Instance.new("UICorner"); mpBoxC.CornerRadius = UDim.new(0, 6); mpBoxC.Parent = mpBox
+local mpBoxPad = Instance.new("UIPadding"); mpBoxPad.PaddingLeft = UDim.new(0, 8); mpBoxPad.PaddingRight = UDim.new(0, 8); mpBoxPad.Parent = mpBox
+
+local mpErr = Instance.new("TextLabel")
+mpErr.Size = UDim2.new(1, -20, 0, 16); mpErr.Position = UDim2.new(0, 10, 0, 86)
+mpErr.BackgroundTransparency = 1
+mpErr.Text = ""
+mpErr.TextSize = 11
+mpErr.TextColor3 = Color3.fromRGB(220, 100, 100)
+mpErr.Parent = megaPassCard
+addFont(mpErr)
+
+local mpBtnRow = Instance.new("Frame")
+mpBtnRow.Size = UDim2.new(1, -20, 0, 32); mpBtnRow.Position = UDim2.new(0, 10, 1, -42)
+mpBtnRow.BackgroundTransparency = 1
+mpBtnRow.Parent = megaPassCard
+local mpLayout = Instance.new("UIListLayout")
+mpLayout.FillDirection = Enum.FillDirection.Horizontal
+mpLayout.Padding = UDim.new(0, 8)
+mpLayout.SortOrder = Enum.SortOrder.LayoutOrder
+mpLayout.Parent = mpBtnRow
+
+local mpCancelBtn = Instance.new("TextButton")
+mpCancelBtn.Size = UDim2.new(0.5, -4, 1, 0); mpCancelBtn.BorderSizePixel = 0
+mpCancelBtn.Text = "Cancel"; mpCancelBtn.TextSize = 12; mpCancelBtn.AutoButtonColor = true
+mpCancelBtn.Parent = mpBtnRow
+addBtn(mpCancelBtn); addText(mpCancelBtn); addFont(mpCancelBtn)
+local mpCanC = Instance.new("UICorner"); mpCanC.CornerRadius = UDim.new(0, 6); mpCanC.Parent = mpCancelBtn
+
+local mpSubmitBtn = Instance.new("TextButton")
+mpSubmitBtn.Size = UDim2.new(0.5, -4, 1, 0); mpSubmitBtn.BorderSizePixel = 0
+mpSubmitBtn.Text = "Submit"; mpSubmitBtn.TextSize = 12; mpSubmitBtn.AutoButtonColor = true
+mpSubmitBtn.Parent = mpBtnRow
+addAccent(mpSubmitBtn)
+mpSubmitBtn.TextColor3 = Color3.new(1, 1, 1)
+addFont(mpSubmitBtn)
+local mpSubC = Instance.new("UICorner"); mpSubC.CornerRadius = UDim.new(0, 6); mpSubC.Parent = mpSubmitBtn
+
+-- ============================================================
 --  TABS
 -- ============================================================
-local tabNames = { "Customization", "Game", "Game Customization" }
+local tabNames = { "Customization", "Game", "Game Customization", "Safe Mode", "Mega Hacks", "Last Updates" }
 local tabButtons, tabFrames = {}, {}
 
 local function switchTab(name)
@@ -1552,7 +1884,7 @@ end
 
 for i, name in ipairs(tabNames) do
     local tb = Instance.new("TextButton")
-    tb.Size = UDim2.new(1, 0, 0, 40)
+    tb.Size = UDim2.new(1, 0, 0, 38)
     tb.BorderSizePixel = 0; tb.Text = name
     tb.TextSize = 11; tb.AutoButtonColor = true
     tb.TextWrapped = true
@@ -1574,12 +1906,323 @@ for i, name in ipairs(tabNames) do
     layout.Parent = sf
     tabFrames[name] = sf
 
-    tb.MouseButton1Click:Connect(function() switchTab(name) end)
+    tb.MouseButton1Click:Connect(function()
+        if name == "Safe Mode" and not safeModeActive then
+            safeConfirmGui.Enabled = true
+            return
+        end
+        if name == "Mega Hacks" and not megaHacksUnlocked then
+            mpBox.Text = ""
+            mpErr.Text = ""
+            megaPassGui.Enabled = true
+            return
+        end
+        switchTab(name)
+    end)
 end
 
 local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
+local safeTab = tabFrames["Safe Mode"]
+local megaTab = tabFrames["Mega Hacks"]
+local updatesTab = tabFrames["Last Updates"]
+
+-- ============================================================
+--  LAST UPDATES TAB CONTENT
+-- ============================================================
+makeSectionHeader(updatesTab, "VAGRANT SURVIVAL — CHANGELOG")
+
+local verHeader = Instance.new("Frame")
+verHeader.Size = UDim2.new(1, 0, 0, 40); verHeader.BackgroundTransparency = 1
+verHeader.Parent = updatesTab
+addBtn(verHeader)
+local vhc = Instance.new("UICorner"); vhc.CornerRadius = UDim.new(0, 8); vhc.Parent = verHeader
+verHeader.BackgroundColor3 = Theme.Accent
+
+local vhLbl = Instance.new("TextLabel")
+vhLbl.Size = UDim2.new(1, -20, 1, 0); vhLbl.Position = UDim2.new(0, 10, 0, 0)
+vhLbl.BackgroundTransparency = 1
+vhLbl.Text = "Current version: " .. SCRIPT_VERSION
+vhLbl.TextSize = 14
+vhLbl.TextColor3 = Color3.new(1, 1, 1)
+vhLbl.Font = Enum.Font.GothamBold
+vhLbl.TextXAlignment = Enum.TextXAlignment.Left
+vhLbl.Parent = verHeader
+addFont(vhLbl)
+
+-- Render each version block
+for _, entry in ipairs(CHANGELOG) do
+    local block = Instance.new("Frame")
+    block.Size = UDim2.new(1, 0, 0, 0)
+    block.AutomaticSize = Enum.AutomaticSize.Y
+    block.BorderSizePixel = 0
+    block.Parent = updatesTab
+    addBtn(block)
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = block
+    local bs = Instance.new("UIStroke"); bs.Thickness = 1; bs.Parent = block
+    addStroke(bs)
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
+    pad.Parent = block
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 4)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = block
+
+    local titleRow = Instance.new("Frame")
+    titleRow.Size = UDim2.new(1, 0, 0, 22); titleRow.BackgroundTransparency = 1
+    titleRow.Parent = block
+
+    local vLabel = Instance.new("TextLabel")
+    vLabel.Size = UDim2.new(1, -100, 1, 0)
+    vLabel.BackgroundTransparency = 1
+    vLabel.Text = "v" .. entry.version .. (entry.date ~= "" and ("  •  " .. entry.date) or "")
+    vLabel.TextSize = 13
+    vLabel.TextColor3 = Theme.Accent
+    vLabel.Font = Enum.Font.GothamBold
+    vLabel.TextXAlignment = Enum.TextXAlignment.Left
+    vLabel.Parent = titleRow
+    addFont(vLabel)
+
+    if entry.version == SCRIPT_VERSION then
+        local tag = Instance.new("TextLabel")
+        tag.Size = UDim2.new(0, 70, 1, 0); tag.Position = UDim2.new(1, -70, 0, 0)
+        tag.BackgroundColor3 = Color3.fromRGB(120, 230, 140)
+        tag.Text = "LATEST"
+        tag.TextColor3 = Color3.fromRGB(20, 40, 25)
+        tag.TextSize = 10
+        tag.Font = Enum.Font.GothamBold
+        tag.Parent = titleRow
+        addFont(tag)
+        local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(0, 4); tc.Parent = tag
+    end
+
+    for _, line in ipairs(entry.entries) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 18)
+        row.BackgroundTransparency = 1
+        row.Parent = block
+
+        local bullet = Instance.new("TextLabel")
+        bullet.Size = UDim2.new(0, 14, 1, 0)
+        bullet.BackgroundTransparency = 1
+        bullet.Text = "•"
+        bullet.TextSize = 12
+        bullet.TextColor3 = Theme.Accent
+        bullet.Parent = row
+        addFont(bullet)
+
+        local textLbl = Instance.new("TextLabel")
+        textLbl.Size = UDim2.new(1, -14, 1, 0); textLbl.Position = UDim2.new(0, 14, 0, 0)
+        textLbl.BackgroundTransparency = 1
+        textLbl.Text = line
+        textLbl.TextSize = 11
+        textLbl.TextColor3 = Theme.Text
+        textLbl.TextXAlignment = Enum.TextXAlignment.Left
+        textLbl.Parent = row
+        addFont(textLbl)
+        table.insert(ThemeRefs.text, {el=textLbl, p="TextColor3"})
+    end
+end
+
+-- ============================================================
+--  SAFE MODE TAB CONTENT
+-- ============================================================
+local safeWarningFrame = Instance.new("Frame")
+safeWarningFrame.Size = UDim2.new(1, 0, 0, 200); safeWarningFrame.BackgroundTransparency = 1
+safeWarningFrame.Parent = safeTab
+
+local swTitle = Instance.new("TextLabel")
+swTitle.Size = UDim2.new(1, 0, 0, 26); swTitle.Position = UDim2.new(0, 0, 0, 20)
+swTitle.BackgroundTransparency = 1
+swTitle.Text = "Are you sure?"
+swTitle.TextSize = 16
+swTitle.TextColor3 = Theme.Text
+swTitle.Font = Enum.Font.GothamBold
+swTitle.Parent = safeWarningFrame
+addFont(swTitle)
+
+local swWarn = Instance.new("TextLabel")
+swWarn.Size = UDim2.new(1, -20, 0, 60); swWarn.Position = UDim2.new(0, 10, 0, 55)
+swWarn.BackgroundTransparency = 1
+swWarn.Text = "By clicking Yes, you won't be able to use other cheats.\nOnly ESP (names), Freecam and Spectate will be available."
+swWarn.TextSize = 12
+swWarn.TextColor3 = Color3.fromRGB(220, 160, 160)
+swWarn.TextWrapped = true
+swWarn.Parent = safeWarningFrame
+addFont(swWarn)
+
+local swBtnRow = Instance.new("Frame")
+swBtnRow.Size = UDim2.new(1, 0, 0, 32); swBtnRow.Position = UDim2.new(0, 0, 0, 130)
+swBtnRow.BackgroundTransparency = 1
+swBtnRow.Parent = safeWarningFrame
+local swLayout = Instance.new("UIListLayout")
+swLayout.FillDirection = Enum.FillDirection.Horizontal
+swLayout.Padding = UDim.new(0, 8)
+swLayout.SortOrder = Enum.SortOrder.LayoutOrder
+swLayout.Parent = swBtnRow
+
+local swNoBtn = Instance.new("TextButton")
+swNoBtn.Size = UDim2.new(0.5, -4, 1, 0); swNoBtn.BorderSizePixel = 0
+swNoBtn.Text = "No"; swNoBtn.TextSize = 12; swNoBtn.AutoButtonColor = true
+swNoBtn.Parent = swBtnRow
+addBtn(swNoBtn); addText(swNoBtn); addFont(swNoBtn)
+local swNoC = Instance.new("UICorner"); swNoC.CornerRadius = UDim.new(0, 6); swNoC.Parent = swNoBtn
+
+local swYesBtn = Instance.new("TextButton")
+swYesBtn.Size = UDim2.new(0.5, -4, 1, 0); swYesBtn.BorderSizePixel = 0
+swYesBtn.Text = "Yes"; swYesBtn.TextSize = 12; swYesBtn.AutoButtonColor = true
+swYesBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+swYesBtn.TextColor3 = Color3.new(1, 1, 1)
+swYesBtn.Parent = swBtnRow
+addFont(swYesBtn)
+local swYesC = Instance.new("UICorner"); swYesC.CornerRadius = UDim.new(0, 6); swYesC.Parent = swYesBtn
+
+local safeActiveFrame = Instance.new("Frame")
+safeActiveFrame.Size = UDim2.new(1, 0, 0, 220); safeActiveFrame.BackgroundTransparency = 1
+safeActiveFrame.Visible = false
+safeActiveFrame.Parent = safeTab
+
+-- ============================================================
+--  MEGA HACKS TAB CONTENT
+-- ============================================================
+local megaPlaceholder = Instance.new("Frame")
+megaPlaceholder.Size = UDim2.new(1, 0, 0, 200); megaPlaceholder.BackgroundTransparency = 1
+megaPlaceholder.Visible = false
+megaPlaceholder.Parent = megaTab
+
+local mhTitle = Instance.new("TextLabel")
+mhTitle.Size = UDim2.new(1, 0, 0, 30); mhTitle.Position = UDim2.new(0, 0, 0, 40)
+mhTitle.BackgroundTransparency = 1
+mhTitle.Text = "Mega Hacks"
+mhTitle.TextSize = 20
+mhTitle.TextColor3 = Theme.Accent
+mhTitle.Font = Enum.Font.GothamBold
+mhTitle.Parent = megaPlaceholder
+addFont(mhTitle)
+
+local mhSub = Instance.new("TextLabel")
+mhSub.Size = UDim2.new(1, 0, 0, 24); mhSub.Position = UDim2.new(0, 0, 0, 80)
+mhSub.BackgroundTransparency = 1
+mhSub.Text = "Unlocked — features coming soon"
+mhSub.TextSize = 13
+mhSub.TextColor3 = Color3.fromRGB(150, 150, 150)
+mhSub.Parent = megaPlaceholder
+addFont(mhSub)
+
+local mhNote = Instance.new("TextLabel")
+mhNote.Size = UDim2.new(1, 0, 0, 40); mhNote.Position = UDim2.new(0, 0, 0, 120)
+mhNote.BackgroundTransparency = 1
+mhNote.Text = "For games without anti-cheat only"
+mhNote.TextSize = 11
+mhNote.TextColor3 = Color3.fromRGB(180, 120, 120)
+mhNote.TextWrapped = true
+mhNote.Parent = megaPlaceholder
+addFont(mhNote)
+
+-- ============================================================
+--  SAFE MODE FUNCTIONS
+-- ============================================================
+local function activateSafeMode()
+    safeModeActive = true
+    safeConfirmGui.Enabled = false
+
+    local toHide = { "Game", "Game Customization", "Mega Hacks" }
+    for _, n in ipairs(toHide) do
+        if tabButtons[n] then
+            pcall(function() tabButtons[n]:Destroy() end)
+            tabButtons[n] = nil
+        end
+    end
+
+    safeWarningFrame.Visible = false
+    safeActiveFrame.Visible = true
+
+    if not safeActiveFrame:GetAttribute("Populated") then
+        safeActiveFrame:SetAttribute("Populated", true)
+
+        makeSectionHeader(safeActiveFrame, "SAFE MODE ACTIVE")
+
+        makeToggle(safeActiveFrame, "ESP (names only)",
+            function() return Config.ESP.Enabled end,
+            function(v)
+                Config.ESP.Enabled = v
+                Config.ESP.ShowName = true
+                Config.ESP.ShowHP = false
+                Config.ESP.ShowDistance = false
+            end)
+
+        makeSlider(safeActiveFrame, "Highlight distance", 50, 2000,
+            function() return Config.ESP.MaxDistForHighlight end,
+            function(v) Config.ESP.MaxDistForHighlight = v end, true)
+
+        makeToggle(safeActiveFrame, "Freecam",
+            function() return Config.Freecam.Enabled end,
+            function(v)
+                Config.Freecam.Enabled = v
+                if v then startFreecam() else stopFreecam() end
+            end)
+
+        makeToggle(safeActiveFrame, "Spectate",
+            function() return Spectate.Enabled end,
+            function(v)
+                if v then
+                    local list = getSpectateList()
+                    if #list > 0 then setSpectateTarget(list[1]) end
+                else
+                    stopSpectate()
+                end
+            end)
+    end
+
+    switchTab("Safe Mode")
+end
+
+scYesBtn.MouseButton1Click:Connect(activateSafeMode)
+scNoBtn.MouseButton1Click:Connect(function() safeConfirmGui.Enabled = false end)
+safeConfirmBackdrop.MouseButton1Click:Connect(function() safeConfirmGui.Enabled = false end)
+
+swYesBtn.MouseButton1Click:Connect(activateSafeMode)
+swNoBtn.MouseButton1Click:Connect(function() switchTab("Customization") end)
+
+-- ============================================================
+--  MEGA HACKS FUNCTIONS
+-- ============================================================
+local function unlockMegaHacks()
+    megaHacksUnlocked = true
+    megaPassGui.Enabled = false
+    megaPlaceholder.Visible = true
+    switchTab("Mega Hacks")
+end
+
+mpSubmitBtn.MouseButton1Click:Connect(function()
+    if mpBox.Text == MEGA_PASSWORD then
+        unlockMegaHacks()
+    else
+        mpErr.Text = "Wrong password"
+        mpBox.Text = ""
+    end
+end)
+
+mpBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        if mpBox.Text == MEGA_PASSWORD then
+            unlockMegaHacks()
+        else
+            mpErr.Text = "Wrong password"
+            mpBox.Text = ""
+        end
+    end
+end)
+
+mpCancelBtn.MouseButton1Click:Connect(function() megaPassGui.Enabled = false end)
+megaPassBackdrop.MouseButton1Click:Connect(function() megaPassGui.Enabled = false end)
 
 -- ============================================================
 --  TAB: CUSTOMIZATION
@@ -1606,9 +2249,6 @@ makeColorPicker(customTab, "Text",
     function() return Theme.Text end,
     function(c) Theme.Text = c; applyTheme() end)
 
--- ============================================================
---  FONT SELECTOR
--- ============================================================
 makeSectionHeader(customTab, "FONT")
 
 local fontRow = Instance.new("Frame")
@@ -1724,17 +2364,16 @@ local function loadConfig()
     if Config.Freecam.Enabled then startFreecam() else stopFreecam() end
 
     if Config.Cursor.Enabled and Config.Cursor.ImageId ~= "" then
-        cursorImage.Visible = true
-        cursorImage.Size = UDim2.new(0, Config.Cursor.Size, 0, Config.Cursor.Size)
+        applyCursorImage(Config.Cursor.ImageId)
+        if cursorImage then cursorImage.Visible = true end
         if Config.Cursor.HideDefault then
             pcall(function() UserInputService.MouseIconEnabled = false end)
         end
     else
-        cursorImage.Visible = false
+        if cursorImage then cursorImage.Visible = false end
         pcall(function() UserInputService.MouseIconEnabled = true end)
     end
 
-    if Config.Cursor.ImageId ~= "" then applyCursorImage(Config.Cursor.ImageId) end
     if refreshWhitelistUI then refreshWhitelistUI() end
     if refreshSpectateList then refreshSpectateList() end
 
@@ -1777,6 +2416,7 @@ makeSmallBtn(cfgRow2, "Reset All", function()
     Config.Aim.Enabled = false
     Config.Aim.AimPart = "Head"
     Config.Aim.Smoothness = 0.5
+    Config.LookAway.Enabled = false
     Config.NoShadows.Enabled = false
     Config.InfiniteJump.Enabled = false
     Config.Cursor.Enabled = false
@@ -1789,7 +2429,7 @@ makeSmallBtn(cfgRow2, "Reset All", function()
     applyFont()
     applyNoShadows()
     fovCircle.Radius = Config.Aim.FOVRadius
-    cursorImage.Visible = false
+    if cursorImage then cursorImage.Visible = false end
     pcall(function() UserInputService.MouseIconEnabled = true end)
     if refreshWhitelistUI then refreshWhitelistUI() end
     if refreshSpectateList then refreshSpectateList() end
@@ -1813,10 +2453,10 @@ makeToggle(customTab, "Cursor Enabled",
     function(v) Config.Cursor.Enabled = v end,
     function(v)
         if v then
-            if Config.Cursor.ImageId ~= "" then cursorImage.Visible = true end
+            if Config.Cursor.ImageId ~= "" and cursorImage then cursorImage.Visible = true end
             if Config.Cursor.HideDefault then setDefaultCursorVisible(false) end
         else
-            cursorImage.Visible = false
+            if cursorImage then cursorImage.Visible = false end
             setDefaultCursorVisible(true)
         end
     end)
@@ -1837,7 +2477,9 @@ makeTextBox(customTab, "Image ID",
 makeSlider(customTab, "Size (px)", 8, 128,
     function() return Config.Cursor.Size end,
     function(v) Config.Cursor.Size = v end, true,
-    function(v) cursorImage.Size = UDim2.new(0, v, 0, v) end)
+    function(v)
+        if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end
+    end)
 
 -- ============================================================
 --  TAB: GAME
@@ -1930,6 +2572,32 @@ makeSlider(gameTab, "Horizontal radius (studs)", 1, 15,
 makeSlider(gameTab, "Min height diff (studs)", 1, 20,
     function() return Config.Aim.VerticalBlockMinHeight end,
     function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
+
+makeSectionHeader(gameTab, "LOOK-AWAY (Anti-Aim)")
+
+makeToggle(gameTab, "Look-Away Enabled",
+    function() return Config.LookAway.Enabled end,
+    function(v) Config.LookAway.Enabled = v end)
+
+makeSlider(gameTab, "Trigger radius (px)", 5, 150,
+    function() return Config.LookAway.Radius end,
+    function(v) Config.LookAway.Radius = v end, true)
+
+makeSlider(gameTab, "Push strength", 1, 60,
+    function() return Config.LookAway.Strength end,
+    function(v) Config.LookAway.Strength = v end, true)
+
+makeSlider(gameTab, "Max distance (studs)", 50, 2000,
+    function() return Config.LookAway.MaxDistance end,
+    function(v) Config.LookAway.MaxDistance = v end, true)
+
+local lookAwayHelp = Instance.new("TextLabel")
+lookAwayHelp.Size = UDim2.new(1, 0, 0, 32); lookAwayHelp.BackgroundTransparency = 1
+lookAwayHelp.Text = "Works only in shift-lock / first-person.\nCamera rotates away from players on crosshair."
+lookAwayHelp.TextColor3 = Color3.fromRGB(150, 150, 150)
+lookAwayHelp.TextSize = 10
+lookAwayHelp.TextWrapped = true; lookAwayHelp.Parent = gameTab
+addFont(lookAwayHelp)
 
 makeSectionHeader(gameTab, "FREECAM")
 
@@ -2298,4 +2966,4 @@ task.spawn(function()
     loadConfig()
 end)
 
-print("[Vagrant Survival Best Script by Dokoo2] Loaded. F1 to toggle menu.")
+print("[Vagrant Survival Best Script by Dokoo2] v" .. SCRIPT_VERSION .. " loaded. F1 to toggle menu.")
