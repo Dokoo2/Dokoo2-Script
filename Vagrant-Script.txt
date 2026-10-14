@@ -4,9 +4,6 @@
 --   Version 2.1
 -- ============================================================
 
--- ============================================================
---  SCRIPT VERSION & CHANGELOG
--- ============================================================
 local SCRIPT_VERSION = "2.1"
 
 local CHANGELOG = {
@@ -15,19 +12,21 @@ local CHANGELOG = {
         date = "Latest",
         entries = {
             "New tab: Last Updates (this changelog)",
-            "Fixed Aim — now works in shift-lock / first-person",
-            "Look-Away reworked — rotates camera instead of cursor",
+            "Fixed Aim - now works in shift-lock / first-person",
+            "Look-Away reworked - rotates camera instead of cursor",
             "Aim smoothness now uses Lerp in locked camera mode",
+            "Config save/load now shows a notification + sound",
+            "ESP Tracers now come from your body instead of screen bottom",
         },
     },
     {
         version = "2.0",
         date = "",
         entries = {
-            "Safe Mode tab — confirmed access, locks other tabs",
+            "Safe Mode tab - confirmed access, locks other tabs",
             "Safe Mode: ESP (names only) + Freecam + Spectate",
-            "Mega Hacks tab — password protected",
-            "Single-instance guard — can't run twice",
+            "Mega Hacks tab - password protected",
+            "Single-instance guard - can not run twice",
             "Custom cursor now stays on top of everything",
             "Cursor keep-alive every 1 second",
         },
@@ -38,7 +37,7 @@ local CHANGELOG = {
         entries = {
             "Look-Away (anti-aim) feature added",
             "ESP Tracers (lines to players) with color picker",
-            "Color picker rebuilt — HSV wheel + RGB + hex",
+            "Color picker rebuilt - HSV wheel + RGB + hex",
             "Per-element ESP colors (name / HP / distance)",
             "Highlight fill & outline color pickers",
         },
@@ -52,7 +51,7 @@ if _G.VagrantScriptLoaded then
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "Vagrant Survival",
-            Text = "Don't launch more than once!",
+            Text = "Do not launch more than once!",
             Duration = 5,
         })
     end)
@@ -108,7 +107,7 @@ local function showSplash()
 
     local sub = Instance.new("TextLabel")
     sub.Size = UDim2.new(1, 0, 0, 16); sub.Position = UDim2.new(0, 0, 0, 40)
-    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2  •  v" .. SCRIPT_VERSION
+    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2  |  v" .. SCRIPT_VERSION
     sub.TextColor3 = Color3.fromRGB(150, 100, 220); sub.Font = Enum.Font.Ubuntu; sub.TextSize = 11
     sub.Parent = card
 
@@ -210,9 +209,6 @@ local Config = {
     Font = "Ubuntu",
 }
 
--- ============================================================
---  STATE
--- ============================================================
 local safeModeActive = false
 local megaHacksUnlocked = false
 local MEGA_PASSWORD = "X1k*2j7W+1"
@@ -382,7 +378,39 @@ task.spawn(function()
 end)
 
 -- ============================================================
---  COLOR PICKER POPUP
+--  NOTIFICATION SYSTEM
+-- ============================================================
+local NOTIFY_SOUND_ID = "rbxassetid://18595195017"
+
+local function playNotifySound()
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local sound = Instance.new("Sound")
+        sound.SoundId = NOTIFY_SOUND_ID
+        sound.Volume = 1
+        sound.Parent = hrp
+        sound:Play()
+        game:GetService("Debris"):AddItem(sound, 5)
+    end)
+end
+
+local function notify(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 4,
+        })
+    end)
+    pcall(playNotifySound)
+end
+
+-- ============================================================
+--  COLOR PICKER
 -- ============================================================
 local cpGui = Instance.new("ScreenGui")
 cpGui.Name = "VagrantColorPicker"
@@ -862,15 +890,29 @@ end
 
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
+
     if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then
-        line.Visible = false; return
+        line.Visible = false
+        return
     end
-    local targetPos = character:FindFirstChild("Head") or rootPart
-    local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
-    if not onScreen or sp.Z <= 0 then line.Visible = false; return end
-    local viewport = Camera.ViewportSize
-    line.From = Vector2.new(viewport.X / 2, viewport.Y)
-    line.To = Vector2.new(sp.X, sp.Y)
+
+    local myChar = LocalPlayer.Character
+    if not myChar then line.Visible = false; return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then line.Visible = false; return end
+
+    local targetPart = character:FindFirstChild("Head") or rootPart
+
+    local spFrom, onFrom = Camera:WorldToViewportPoint(myRoot.Position)
+    local spTo,   onTo   = Camera:WorldToViewportPoint(targetPart.Position)
+
+    if not onFrom or not onTo or spFrom.Z <= 0 or spTo.Z <= 0 then
+        line.Visible = false
+        return
+    end
+
+    line.From = Vector2.new(spFrom.X, spFrom.Y)
+    line.To = Vector2.new(spTo.X, spTo.Y)
     line.Color = Config.ESP.TracerColor
     line.Thickness = Config.ESP.TracerThickness
     line.Transparency = 1
@@ -1005,7 +1047,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2: AIM (with shift-lock support)
+--  BLOCK 2: AIM
 -- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
@@ -1065,7 +1107,6 @@ local function getClosestPlayerToCursor()
     local viewport = Camera.ViewportSize
     local cx, cy = viewport.X / 2, viewport.Y / 2
 
-    -- In shift-lock, "cursor" = center of screen
     local refX, refY
     if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
        or LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
@@ -1115,12 +1156,10 @@ RunService.RenderStepped:Connect(function()
     if not bodyPart then return end
 
     if isLockedCamera() then
-        -- Rotate camera directly (shift-lock / first-person)
         local currentCF = Camera.CFrame
         local targetCF = CFrame.lookAt(currentCF.Position, bodyPart.Position)
         Camera.CFrame = currentCF:Lerp(targetCF, Config.Aim.Smoothness)
     else
-        -- Move mouse (normal mode)
         if not hasMouseMoveRel then return end
         local screenPos = getScreenPoint(bodyPart)
         if not screenPos then return end
@@ -1134,7 +1173,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2.5: LOOK-AWAY (rotates camera in locked mode)
+--  BLOCK 2.5: LOOK-AWAY
 -- ============================================================
 local LOOK_AWAY_ANGLE_SCALE = 0.0015
 
@@ -1461,7 +1500,7 @@ table.insert(ThemeRefs.text, {el=titleLbl, p="TextColor3"})
 local subtitleLbl = Instance.new("TextLabel")
 subtitleLbl.Size = UDim2.new(1, -12, 0, 16); subtitleLbl.Position = UDim2.new(0, 12, 0, 26)
 subtitleLbl.BackgroundTransparency = 1
-subtitleLbl.Text = "by Dokoo2  •  v" .. SCRIPT_VERSION .. "  •  F1 to close / open"
+subtitleLbl.Text = "by Dokoo2  |  v" .. SCRIPT_VERSION .. "  |  F1 to close / open"
 subtitleLbl.TextSize = 10
 subtitleLbl.TextTransparency = 0.2
 subtitleLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -1751,7 +1790,6 @@ local function makePopup(title, width, height)
     return gui, backdrop, card
 end
 
--- Safe Mode confirm popup
 local safeConfirmGui, safeConfirmBackdrop, safeConfirmCard = makePopup("SafeModeConfirm", 400, 180)
 
 local scTitle = Instance.new("TextLabel")
@@ -1800,7 +1838,6 @@ scYesBtn.Parent = scBtnRow
 addFont(scYesBtn)
 local scYesC = Instance.new("UICorner"); scYesC.CornerRadius = UDim.new(0, 6); scYesC.Parent = scYesBtn
 
--- Mega Hacks password popup
 local megaPassGui, megaPassBackdrop, megaPassCard = makePopup("MegaHacksPassword", 400, 180)
 
 local mpTitle = Instance.new("TextLabel")
@@ -1929,9 +1966,9 @@ local megaTab = tabFrames["Mega Hacks"]
 local updatesTab = tabFrames["Last Updates"]
 
 -- ============================================================
---  LAST UPDATES TAB CONTENT
+--  LAST UPDATES TAB
 -- ============================================================
-makeSectionHeader(updatesTab, "VAGRANT SURVIVAL — CHANGELOG")
+makeSectionHeader(updatesTab, "VAGRANT SURVIVAL - CHANGELOG")
 
 local verHeader = Instance.new("Frame")
 verHeader.Size = UDim2.new(1, 0, 0, 40); verHeader.BackgroundTransparency = 1
@@ -1951,7 +1988,6 @@ vhLbl.TextXAlignment = Enum.TextXAlignment.Left
 vhLbl.Parent = verHeader
 addFont(vhLbl)
 
--- Render each version block
 for _, entry in ipairs(CHANGELOG) do
     local block = Instance.new("Frame")
     block.Size = UDim2.new(1, 0, 0, 0)
@@ -1982,7 +2018,7 @@ for _, entry in ipairs(CHANGELOG) do
     local vLabel = Instance.new("TextLabel")
     vLabel.Size = UDim2.new(1, -100, 1, 0)
     vLabel.BackgroundTransparency = 1
-    vLabel.Text = "v" .. entry.version .. (entry.date ~= "" and ("  •  " .. entry.date) or "")
+    vLabel.Text = "v" .. entry.version .. (entry.date ~= "" and ("  |  " .. entry.date) or "")
     vLabel.TextSize = 13
     vLabel.TextColor3 = Theme.Accent
     vLabel.Font = Enum.Font.GothamBold
@@ -2012,7 +2048,7 @@ for _, entry in ipairs(CHANGELOG) do
         local bullet = Instance.new("TextLabel")
         bullet.Size = UDim2.new(0, 14, 1, 0)
         bullet.BackgroundTransparency = 1
-        bullet.Text = "•"
+        bullet.Text = "*"
         bullet.TextSize = 12
         bullet.TextColor3 = Theme.Accent
         bullet.Parent = row
@@ -2032,7 +2068,7 @@ for _, entry in ipairs(CHANGELOG) do
 end
 
 -- ============================================================
---  SAFE MODE TAB CONTENT
+--  SAFE MODE TAB
 -- ============================================================
 local safeWarningFrame = Instance.new("Frame")
 safeWarningFrame.Size = UDim2.new(1, 0, 0, 200); safeWarningFrame.BackgroundTransparency = 1
@@ -2090,7 +2126,7 @@ safeActiveFrame.Visible = false
 safeActiveFrame.Parent = safeTab
 
 -- ============================================================
---  MEGA HACKS TAB CONTENT
+--  MEGA HACKS TAB
 -- ============================================================
 local megaPlaceholder = Instance.new("Frame")
 megaPlaceholder.Size = UDim2.new(1, 0, 0, 200); megaPlaceholder.BackgroundTransparency = 1
@@ -2110,7 +2146,7 @@ addFont(mhTitle)
 local mhSub = Instance.new("TextLabel")
 mhSub.Size = UDim2.new(1, 0, 0, 24); mhSub.Position = UDim2.new(0, 0, 0, 80)
 mhSub.BackgroundTransparency = 1
-mhSub.Text = "Unlocked — features coming soon"
+mhSub.Text = "Unlocked - features coming soon"
 mhSub.TextSize = 13
 mhSub.TextColor3 = Color3.fromRGB(150, 150, 150)
 mhSub.Parent = megaPlaceholder
@@ -2325,11 +2361,22 @@ local function serializeValue(v)
 end
 
 local function saveConfig()
-    if not hasFileAPI then warn("[Vagrant] writefile/readfile not available."); return false end
+    if not hasFileAPI then
+        warn("[Vagrant] writefile/readfile not available.")
+        notify("Vagrant Survival", "Save failed - no file API")
+        return false
+    end
     local data = "return " .. serializeValue({ Config = Config, Theme = Theme })
     local ok = pcall(writefile, CONFIG_FILE, data)
-    if ok then print("[Vagrant] Config saved.") return true
-    else warn("[Vagrant] Save failed."); return false end
+    if ok then
+        print("[Vagrant] Config saved.")
+        notify("Vagrant Survival", "Config saved successfully!")
+        return true
+    else
+        warn("[Vagrant] Save failed.")
+        notify("Vagrant Survival", "Save failed")
+        return false
+    end
 end
 
 local function deepMerge(target, source)
@@ -2343,16 +2390,36 @@ local function deepMerge(target, source)
 end
 
 local function loadConfig()
-    if not hasFileAPI then warn("[Vagrant] writefile/readfile not available."); return false end
+    if not hasFileAPI then
+        warn("[Vagrant] writefile/readfile not available.")
+        notify("Vagrant Survival", "Load failed - no file API")
+        return false
+    end
     local ok1, exists = pcall(isfile, CONFIG_FILE)
-    if not ok1 or not exists then warn("[Vagrant] Config file not found."); return false end
+    if not ok1 or not exists then
+        warn("[Vagrant] Config file not found.")
+        notify("Vagrant Survival", "Config file not found")
+        return false
+    end
     local ok2, content = pcall(readfile, CONFIG_FILE)
-    if not ok2 or not content then warn("[Vagrant] Could not read file."); return false end
+    if not ok2 or not content then
+        warn("[Vagrant] Could not read file.")
+        notify("Vagrant Survival", "Could not read file")
+        return false
+    end
     local fn = loadstring or load
     local ok3, chunk = pcall(fn, content)
-    if not ok3 or not chunk then warn("[Vagrant] Parse error."); return false end
+    if not ok3 or not chunk then
+        warn("[Vagrant] Parse error.")
+        notify("Vagrant Survival", "Config parse error")
+        return false
+    end
     local ok4, data = pcall(chunk)
-    if not ok4 or type(data) ~= "table" then warn("[Vagrant] Config corrupted."); return false end
+    if not ok4 or type(data) ~= "table" then
+        warn("[Vagrant] Config corrupted.")
+        notify("Vagrant Survival", "Config corrupted")
+        return false
+    end
     if data.Config then deepMerge(Config, data.Config) end
     if data.Theme then deepMerge(Theme, data.Theme) end
 
@@ -2380,6 +2447,7 @@ local function loadConfig()
     syncAll()
     syncFontButtons()
     print("[Vagrant] Config loaded.")
+    notify("Vagrant Survival", "Config loaded successfully!")
     return true
 end
 
@@ -2616,7 +2684,7 @@ makeSlider(gameTab, "Mouse sensitivity", 0.0005, 0.01,
 
 local freecamHelp = Instance.new("TextLabel")
 freecamHelp.Size = UDim2.new(1, 0, 0, 34); freecamHelp.BackgroundTransparency = 1
-freecamHelp.Text = "WASD — fly • Space — up • LeftCtrl — down\nLeftShift — boost • RMB — rotate camera"
+freecamHelp.Text = "WASD - fly | Space - up | LeftCtrl - down\nLeftShift - boost | RMB - rotate camera"
 freecamHelp.TextColor3 = Color3.fromRGB(150, 150, 150)
 freecamHelp.TextSize = 10
 freecamHelp.TextWrapped = true; freecamHelp.Parent = gameTab
@@ -2646,8 +2714,8 @@ sbLayout.FillDirection = Enum.FillDirection.Horizontal
 sbLayout.Padding = UDim.new(0, 6); sbLayout.SortOrder = Enum.SortOrder.LayoutOrder
 sbLayout.Parent = specBtnRow
 
-makeSmallBtn(specBtnRow, "◀ Prev", function() spectateNext(-1); refreshSpectateList() end)
-makeSmallBtn(specBtnRow, "Next ▶", function() spectateNext(1); refreshSpectateList() end)
+makeSmallBtn(specBtnRow, "< Prev", function() spectateNext(-1); refreshSpectateList() end)
+makeSmallBtn(specBtnRow, "Next >", function() spectateNext(1); refreshSpectateList() end)
 
 local specListFrame = Instance.new("Frame")
 specListFrame.Size = UDim2.new(1, 0, 0, 0); specListFrame.AutomaticSize = Enum.AutomaticSize.Y
@@ -2693,7 +2761,7 @@ function refreshSpectateList()
         local nl = Instance.new("TextLabel")
         nl.Size = UDim2.new(1, -110, 1, 0); nl.Position = UDim2.new(0, 8, 0, 0)
         nl.BackgroundTransparency = 1
-        nl.Text = (isTarget and "▶ " or "") .. p.Name .. (inWl and "  [WL]" or "")
+        nl.Text = (isTarget and "> " or "") .. p.Name .. (inWl and "  [WL]" or "")
         nl.TextColor3 = Theme.Text; nl.TextSize = 11
         nl.TextXAlignment = Enum.TextXAlignment.Left; nl.Parent = btn
         addFont(nl)
@@ -2764,7 +2832,7 @@ makeSlider(gameCustTab, "Text size", 8, 32,
     function() return Config.ESP.TextSize end,
     function(v) Config.ESP.TextSize = v end, true)
 
-makeSectionHeader(gameCustTab, "ESP — ELEMENTS")
+makeSectionHeader(gameCustTab, "ESP - ELEMENTS")
 
 makeToggle(gameCustTab, "Show Name",
     function() return Config.ESP.ShowName end,
@@ -2778,7 +2846,7 @@ makeToggle(gameCustTab, "Show Distance",
     function() return Config.ESP.ShowDistance end,
     function(v) Config.ESP.ShowDistance = v end)
 
-makeSectionHeader(gameCustTab, "ESP — TRACERS")
+makeSectionHeader(gameCustTab, "ESP - TRACERS")
 
 makeToggle(gameCustTab, "Tracers Enabled",
     function() return Config.ESP.ShowTracers end,
@@ -2804,7 +2872,7 @@ makeColorPicker(gameCustTab, "Tracer color",
         for _, line in pairs(tracerLines) do line.Color = c end
     end)
 
-makeSectionHeader(gameCustTab, "ESP — COLORS")
+makeSectionHeader(gameCustTab, "ESP - COLORS")
 
 makeColorPicker(gameCustTab, "Name color",
     function() return Config.ESP.NameColor end,
@@ -2832,7 +2900,7 @@ makeToggle(gameCustTab, "No Shadows",
     function(v) Config.NoShadows.Enabled = v end,
     function() applyNoShadows() end)
 
-makeSectionHeader(gameCustTab, "WHITELIST — Aim ignores these players")
+makeSectionHeader(gameCustTab, "WHITELIST - Aim ignores these players")
 
 local wlListFrame
 local refreshWhitelistUI
@@ -2941,7 +3009,7 @@ end)
 refreshWhitelistUI()
 
 -- ============================================================
---  F1 — TOGGLE MENU
+--  F1 TOGGLE
 -- ============================================================
 local menuOpen = true
 local function setMenuOpen(state)
