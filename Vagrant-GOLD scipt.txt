@@ -117,7 +117,7 @@ end
 showSplash()
 
 -- ============================================================
---  ROBLOX-STYLE NOTIFICATION (with sound, in English)
+--  ROBLOX-STYLE NOTIFICATION
 -- ============================================================
 local function openDiscord()
     local url = "https://discord.gg/7fvEdptb"
@@ -134,15 +134,13 @@ local function showDiscordNotification()
     notifGui.DisplayOrder = 9998
     notifGui.Parent = guiParent
 
-    -- Roblox notification sound
     local sound = Instance.new("Sound")
     sound.SoundId = "rbxassetid://4590662766"
     sound.Volume = 0.5
     sound.Parent = SoundService
-    sound:Play()
+    pcall(function() sound:Play() end)
     task.delay(6, function() pcall(function() sound:Destroy() end) end)
 
-    -- Card
     local card = Instance.new("Frame")
     card.Size = UDim2.new(0, 350, 0, 172)
     card.Position = UDim2.new(1, -370, 0, 24)
@@ -151,7 +149,6 @@ local function showDiscordNotification()
     card.Parent = notifGui
     local ncc = Instance.new("UICorner"); ncc.CornerRadius = UDim.new(0, 6); ncc.Parent = card
 
-    -- Blue "!" icon
     local iconBg = Instance.new("Frame")
     iconBg.Size = UDim2.new(0, 32, 0, 32); iconBg.Position = UDim2.new(0, 12, 0, 12)
     iconBg.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
@@ -163,7 +160,6 @@ local function showDiscordNotification()
     iconLbl.Font = Enum.Font.GothamBold; iconLbl.TextSize = 20
     iconLbl.Parent = iconBg
 
-    -- Title
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Size = UDim2.new(1, -70, 0, 22); titleLbl.Position = UDim2.new(0, 52, 0, 8)
     titleLbl.BackgroundTransparency = 1
@@ -173,7 +169,6 @@ local function showDiscordNotification()
     titleLbl.TextXAlignment = Enum.TextXAlignment.Left
     titleLbl.Parent = card
 
-    -- Body
     local bodyLbl = Instance.new("TextLabel")
     bodyLbl.Size = UDim2.new(1, -70, 0, 40); bodyLbl.Position = UDim2.new(0, 52, 0, 28)
     bodyLbl.BackgroundTransparency = 1
@@ -185,7 +180,6 @@ local function showDiscordNotification()
     bodyLbl.TextYAlignment = Enum.TextYAlignment.Top
     bodyLbl.Parent = card
 
-    -- Close X
     local closeBtn = Instance.new("TextButton")
     closeBtn.Size = UDim2.new(0, 24, 0, 24); closeBtn.Position = UDim2.new(1, -32, 0, 8)
     closeBtn.BackgroundTransparency = 1
@@ -193,7 +187,6 @@ local function showDiscordNotification()
     closeBtn.TextSize = 14; closeBtn.Font = Enum.Font.GothamBold
     closeBtn.AutoButtonColor = false; closeBtn.Parent = card
 
-    -- Discord button
     local discordBtn = Instance.new("TextButton")
     discordBtn.Size = UDim2.new(1, -24, 0, 44); discordBtn.Position = UDim2.new(0, 12, 0, 112)
     discordBtn.BorderSizePixel = 0
@@ -205,7 +198,6 @@ local function showDiscordNotification()
     discordBtn.Parent = card
     local dbc = Instance.new("UICorner"); dbc.CornerRadius = UDim.new(0, 6); dbc.Parent = discordBtn
 
-    -- Slide in
     local inTween = TweenService:Create(card,
         TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         { Position = UDim2.new(1, -370, 0, 24) })
@@ -255,12 +247,22 @@ local Config = {
         ShowTracers = false,
         TracerColor = Color3.fromRGB(255, 215, 0),
         TracerThickness = 1,
+        WhitelistHighlight = {
+            Enabled = true,
+            FillColor = Color3.fromRGB(0, 255, 0),
+            OutlineColor = Color3.fromRGB(255, 255, 255),
+        },
     },
     Aim = {
         Enabled = false, FOVRadius = 100, Smoothness = 0.5, MaxDistance = 500,
         MinDot = 0.1, MaxMovePerFrame = 60, AimPart = "Head",
         VerticalBlockEnabled = true, VerticalBlockRadius = 3, VerticalBlockMinHeight = 3,
         Whitelist = {},
+    },
+    Meme = {
+        Enabled = false,
+        Texture = "rbxassetid://11176073582",
+        MaxDistance = 500,
     },
     NoShadows = { Enabled = false },
     InfiniteJump = { Enabled = false },
@@ -288,7 +290,7 @@ local function applyFont()
 end
 
 -- ============================================================
---  THEME (нейтральные кнопки, без золота)
+--  THEME
 -- ============================================================
 local DEFAULT_THEME = {
     Background = Color3.fromRGB(10, 8, 14),
@@ -409,6 +411,95 @@ task.spawn(function()
             if cursorImage and CursorCfg.ImageId ~= "" then cursorImage.Visible = true end
         end
     end
+end)
+
+-- ============================================================
+--  CHANGELOG POPUP
+-- ============================================================
+local clGui = Instance.new("ScreenGui")
+clGui.Name = "VagrantChangelog"
+clGui.ResetOnSpawn = false
+clGui.IgnoreGuiInset = true
+clGui.DisplayOrder = 101
+clGui.Enabled = false
+clGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+clGui.Parent = guiParent
+
+local clBackdrop = Instance.new("TextButton")
+clBackdrop.Size = UDim2.new(1, 0, 1, 0)
+clBackdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+clBackdrop.BackgroundTransparency = 0.4
+clBackdrop.BorderSizePixel = 0
+clBackdrop.Text = ""
+clBackdrop.AutoButtonColor = false
+clBackdrop.ZIndex = 1
+clBackdrop.Parent = clGui
+
+local clCard = Instance.new("Frame")
+clCard.Size = UDim2.new(0, 440, 0, 300)
+clCard.Position = UDim2.new(0.5, -220, 0.5, -150)
+clCard.BorderSizePixel = 0
+clCard.Active = true
+clCard.ZIndex = 2
+clCard.Parent = clGui
+addPanel(clCard)
+local clcc = Instance.new("UICorner"); clcc.CornerRadius = UDim.new(0, 10); clcc.Parent = clCard
+local clcs = Instance.new("UIStroke"); clcs.Thickness = 1.5; clcs.Parent = clCard
+addStroke(clcs)
+
+local clTitleBar = Instance.new("Frame")
+clTitleBar.Size = UDim2.new(1, 0, 0, 34)
+clTitleBar.BorderSizePixel = 0
+clTitleBar.ZIndex = 3
+clTitleBar.Parent = clCard
+addBg(clTitleBar)
+local cltbc = Instance.new("UICorner"); cltbc.CornerRadius = UDim.new(0, 10); cltbc.Parent = clTitleBar
+
+local clTitle = Instance.new("TextLabel")
+clTitle.Size = UDim2.new(1, -50, 1, 0); clTitle.Position = UDim2.new(0, 12, 0, 0)
+clTitle.BackgroundTransparency = 1; clTitle.Text = "Changelog"
+clTitle.TextSize = 13; clTitle.TextXAlignment = Enum.TextXAlignment.Left
+clTitle.ZIndex = 4
+clTitle.Parent = clTitleBar
+addText(clTitle); addFont(clTitle)
+
+local clCloseBtn = Instance.new("TextButton")
+clCloseBtn.Size = UDim2.new(0, 26, 0, 26); clCloseBtn.Position = UDim2.new(1, -32, 0, 4)
+clCloseBtn.BorderSizePixel = 0
+clCloseBtn.Text = "X"; clCloseBtn.TextColor3 = Color3.fromRGB(255, 220, 220)
+clCloseBtn.TextSize = 14; clCloseBtn.Font = Enum.Font.GothamBold
+clCloseBtn.AutoButtonColor = true
+clCloseBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 45)
+clCloseBtn.Active = true
+clCloseBtn.ZIndex = 10
+clCloseBtn.Parent = clTitleBar
+addFont(clCloseBtn)
+local clc = Instance.new("UICorner"); clc.CornerRadius = UDim.new(0, 4); clc.Parent = clCloseBtn
+
+local clBody = Instance.new("TextLabel")
+clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 42)
+clBody.BackgroundTransparency = 1
+clBody.Text = "Updated The Golden UI\n-Made a button with discord link & made a warning that tells game may laggy"
+clBody.TextColor3 = Theme.Text
+clBody.TextSize = 13
+clBody.TextWrapped = true
+clBody.TextXAlignment = Enum.TextXAlignment.Left
+clBody.TextYAlignment = Enum.TextYAlignment.Top
+clBody.ZIndex = 3
+clBody.Parent = clCard
+addFont(clBody)
+
+local function openChangelog() clGui.Enabled = true end
+local function closeChangelog() clGui.Enabled = false end
+
+clCloseBtn.MouseEnter:Connect(function() clCloseBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60) end)
+clCloseBtn.MouseLeave:Connect(function() clCloseBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 45) end)
+clCloseBtn.MouseButton1Click:Connect(closeChangelog)
+clBackdrop.MouseButton1Click:Connect(closeChangelog)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.Escape and clGui.Enabled then closeChangelog() end
 end)
 
 -- ============================================================
@@ -838,7 +929,7 @@ local function openColorPicker(initialColor, onChange)
 end
 
 -- ============================================================
---  BLOCK 1: ESP
+--  BLOCK 1: ESP (whitelist-aware)
 -- ============================================================
 local espHighlights, espBillboards = {}, {}
 local tracerLines = {}
@@ -858,7 +949,11 @@ end
 
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
-    if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then line.Visible = false; return end
+    if not Config.ESP.ShowTracers
+        or distance >= Config.ESP.MaxDistForHighlight
+        or Config.Aim.Whitelist[player.Name] then
+        line.Visible = false; return
+    end
     local targetPos = character:FindFirstChild("Head") or rootPart
     local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
     if not onScreen or sp.Z <= 0 then line.Visible = false; return end
@@ -919,18 +1014,29 @@ local function updateESP(player)
 
     updateTracer(player, character, rootPart, distance)
 
+    local isWhitelisted = Config.Aim.Whitelist[player.Name] == true
+    local useWLColors = isWhitelisted and Config.ESP.WhitelistHighlight.Enabled
+    local fillCol, outlineCol
+    if useWLColors then
+        fillCol = Config.ESP.WhitelistHighlight.FillColor
+        outlineCol = Config.ESP.WhitelistHighlight.OutlineColor
+    else
+        fillCol = Config.ESP.HighlightColor
+        outlineCol = Config.ESP.OutlineColor
+    end
+
     if distance < Config.ESP.MaxDistForHighlight then
         if not espHighlights[player] or not espHighlights[player].Parent then
             local h = Instance.new("Highlight")
             h.Name = "VagrantESP_Highlight"; h.Adornee = character
-            h.FillColor = Config.ESP.HighlightColor; h.OutlineColor = Config.ESP.OutlineColor
+            h.FillColor = fillCol; h.OutlineColor = outlineCol
             h.FillTransparency = 0.5; h.OutlineTransparency = 0
             h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             h.Parent = character; espHighlights[player] = h
         else
             espHighlights[player].Adornee = character
-            espHighlights[player].FillColor = Config.ESP.HighlightColor
-            espHighlights[player].OutlineColor = Config.ESP.OutlineColor
+            espHighlights[player].FillColor = fillCol
+            espHighlights[player].OutlineColor = outlineCol
         end
     else
         if espHighlights[player] then espHighlights[player]:Destroy(); espHighlights[player] = nil end
@@ -986,10 +1092,79 @@ for _, p in ipairs(Players:GetPlayers()) do setupPlayer(p) end
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(p) cleanupESPForPlayer(p); destroyTracer(p) end)
 
+-- ============================================================
+--  BLOCK 1.5: MEME FACE (teammates only)
+-- ============================================================
+local memeDecals = {}
+
+local function isTeammate(player)
+    if player == LocalPlayer then return false end
+    if Config.Aim.Whitelist[player.Name] then return true end
+    if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then return true end
+    return false
+end
+
+local function cleanupMemeForPlayer(player)
+    local d = memeDecals[player]
+    if d then pcall(function() d:Destroy() end); memeDecals[player] = nil end
+end
+
+local function updateMemeDecal(player)
+    if player == LocalPlayer then return end
+
+    local function removeDecal()
+        local d = memeDecals[player]
+        if d then pcall(function() d:Destroy() end); memeDecals[player] = nil end
+    end
+
+    if not Config.Meme.Enabled then removeDecal(); return end
+
+    local character = player.Character
+    if not character or not character.Parent then removeDecal(); return end
+    local head = character:FindFirstChild("Head")
+    if not head then removeDecal(); return end
+
+    if not isTeammate(player) then removeDecal(); return end
+
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    local distance
+    if rootPart then
+        distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
+    else
+        distance = (head.Position - Camera.CFrame.Position).Magnitude
+    end
+
+    local decal = memeDecals[player]
+    if not decal or not decal.Parent then
+        decal = Instance.new("Decal")
+        decal.Name = "VagrantMemeFace"
+        decal.Face = Enum.NormalId.Front
+        decal.Texture = Config.Meme.Texture
+        decal.Transparency = 1
+        decal.Parent = head
+        memeDecals[player] = decal
+    end
+
+    if decal.Texture ~= Config.Meme.Texture then
+        decal.Texture = Config.Meme.Texture
+    end
+
+    decal.Transparency = (distance <= Config.Meme.MaxDistance) and 0 or 1
+end
+
+-- per-frame ESP + meme update
 RunService.RenderStepped:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then updateESP(p) end
+        if p ~= LocalPlayer then
+            updateESP(p)
+            updateMemeDecal(p)
+        end
     end
+end)
+
+-- extra cleanup on character/player removal
+Players.PlayerRemoving:Connect(function(p)
+    cleanupMemeForPlayer(p)
 end)
 
 -- ============================================================
@@ -1350,7 +1525,6 @@ local mainCorner = Instance.new("UICorner"); mainCorner.CornerRadius = UDim.new(
 local mainStroke = Instance.new("UIStroke"); mainStroke.Thickness = 1.5; mainStroke.Parent = main
 addStroke(mainStroke)
 
--- Resize handle
 local RESIZE_MIN_W, RESIZE_MIN_H = 550, 380
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Name = "ResizeHandle"
@@ -1397,7 +1571,6 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 48)
 titleBar.BorderSizePixel = 0; titleBar.Parent = main
@@ -1426,7 +1599,6 @@ subtitleLbl.Parent = titleBar
 addText(subtitleLbl)
 addFont(subtitleLbl)
 
--- Content area
 local contentFrame = Instance.new("Frame")
 contentFrame.Size = UDim2.new(0.8, -12, 1, -80)
 contentFrame.Position = UDim2.new(0, 8, 0, 56)
@@ -1444,7 +1616,6 @@ tabBarLayout.Padding = UDim.new(0, 6)
 tabBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabBarLayout.Parent = tabBar
 
--- HELPERS
 local function makeSectionHeader(parent, text)
     local h = Instance.new("Frame")
     h.Size = UDim2.new(1, 0, 0, 22); h.BackgroundTransparency = 1; h.Parent = parent
@@ -1657,7 +1828,6 @@ local function makeColorPicker(parent, name, getter, setter)
     return row
 end
 
--- TABS
 local tabNames = { "Customization", "Game", "Game Customization" }
 local tabButtons, tabFrames = {}, {}
 
@@ -1705,7 +1875,9 @@ local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
 
--- TAB: CUSTOMIZATION
+-- ============================================================
+--  TAB: CUSTOMIZATION
+-- ============================================================
 makeSectionHeader(customTab, "THEME COLORS")
 makeColorPicker(customTab, "Background", function() return Theme.Background end, function(c) Theme.Background = c; applyTheme() end)
 makeColorPicker(customTab, "Buttons", function() return Theme.Button end, function(c) Theme.Button = c; applyTheme() end)
@@ -1788,7 +1960,19 @@ makeSlider(customTab, "Size (px)", 8, 128,
     function(v) Config.Cursor.Size = v end, true,
     function(v) if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end end)
 
--- TAB: GAME
+makeSectionHeader(customTab, "CHANGELOG")
+
+local changelogBtn = Instance.new("TextButton")
+changelogBtn.Size = UDim2.new(1, 0, 0, 30); changelogBtn.BorderSizePixel = 0
+changelogBtn.Text = "View Changelog"; changelogBtn.TextSize = 12
+changelogBtn.AutoButtonColor = true; changelogBtn.Parent = customTab
+addBtn(changelogBtn); addText(changelogBtn); addFont(changelogBtn)
+local clbtnc = Instance.new("UICorner"); clbtnc.CornerRadius = UDim.new(0, 6); clbtnc.Parent = changelogBtn
+changelogBtn.MouseButton1Click:Connect(function() openChangelog() end)
+
+-- ============================================================
+--  TAB: GAME
+-- ============================================================
 makeSectionHeader(gameTab, "MOVEMENT")
 makeToggle(gameTab, "Infinite Jump",
     function() return Config.InfiniteJump.Enabled end,
@@ -2018,7 +2202,9 @@ task.spawn(function()
     end
 end)
 
--- TAB: GAME CUSTOMIZATION
+-- ============================================================
+--  TAB: GAME CUSTOMIZATION
+-- ============================================================
 makeSectionHeader(gameCustTab, "ESP")
 makeToggle(gameCustTab, "ESP Enabled",
     function() return Config.ESP.Enabled end,
@@ -2060,6 +2246,33 @@ makeColorPicker(gameCustTab, "HP color", function() return Config.ESP.HPColor en
 makeColorPicker(gameCustTab, "Distance color", function() return Config.ESP.DistanceColor end, function(c) Config.ESP.DistanceColor = c end)
 makeColorPicker(gameCustTab, "Highlight fill color", function() return Config.ESP.HighlightColor end, function(c) Config.ESP.HighlightColor = c end)
 makeColorPicker(gameCustTab, "Highlight outline color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
+
+makeSectionHeader(gameCustTab, "WHITELIST — HIGHLIGHT")
+makeToggle(gameCustTab, "Whitelist highlight enabled",
+    function() return Config.ESP.WhitelistHighlight.Enabled end,
+    function(v) Config.ESP.WhitelistHighlight.Enabled = v end)
+makeColorPicker(gameCustTab, "Whitelist fill color",
+    function() return Config.ESP.WhitelistHighlight.FillColor end,
+    function(c) Config.ESP.WhitelistHighlight.FillColor = c end)
+makeColorPicker(gameCustTab, "Whitelist outline color",
+    function() return Config.ESP.WhitelistHighlight.OutlineColor end,
+    function(c) Config.ESP.WhitelistHighlight.OutlineColor = c end)
+
+makeSectionHeader(gameCustTab, "MEME — TEAMMATES")
+makeToggle(gameCustTab, "Meme face on teammates",
+    function() return Config.Meme.Enabled end,
+    function(v) Config.Meme.Enabled = v end)
+makeSlider(gameCustTab, "Meme visibility distance", 50, 2000,
+    function() return Config.Meme.MaxDistance end,
+    function(v) Config.Meme.MaxDistance = v end, true)
+
+local memeHelp = Instance.new("TextLabel")
+memeHelp.Size = UDim2.new(1, 0, 0, 28); memeHelp.BackgroundTransparency = 1
+memeHelp.Text = "Teammate = whitelisted OR same Team.\nMeme face hides beyond distance above."
+memeHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
+memeHelp.TextSize = 10
+memeHelp.TextWrapped = true; memeHelp.Parent = gameCustTab
+addFont(memeHelp)
 
 makeSectionHeader(gameCustTab, "VISUAL")
 makeToggle(gameCustTab, "No Shadows",
