@@ -19,6 +19,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
@@ -115,18 +117,13 @@ end
 showSplash()
 
 -- ============================================================
---  ROBLOX-STYLE NOTIFICATION (warning + Discord button)
+--  ROBLOX-STYLE NOTIFICATION (with sound, in English)
 -- ============================================================
 local function openDiscord()
     local url = "https://discord.gg/7fvEdptb"
-    if type(setclipboard) == "function" then
-        pcall(setclipboard, url)
-    end
-    if type(openbrowser) == "function" then
-        pcall(openbrowser, url)
-    elseif type(request) == "function" then
-        pcall(request, { Url = url, Method = "GET" })
-    end
+    if type(setclipboard) == "function" then pcall(setclipboard, url) end
+    if type(openbrowser) == "function" then pcall(openbrowser, url)
+    elseif type(request) == "function" then pcall(request, { Url = url, Method = "GET" }) end
 end
 
 local function showDiscordNotification()
@@ -137,15 +134,24 @@ local function showDiscordNotification()
     notifGui.DisplayOrder = 9998
     notifGui.Parent = guiParent
 
+    -- Roblox notification sound
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://4590662766"
+    sound.Volume = 0.5
+    sound.Parent = SoundService
+    sound:Play()
+    task.delay(6, function() pcall(function() sound:Destroy() end) end)
+
+    -- Card
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 340, 0, 170)
-    card.Position = UDim2.new(1, -360, 0, 24)
-    card.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+    card.Size = UDim2.new(0, 350, 0, 172)
+    card.Position = UDim2.new(1, -370, 0, 24)
+    card.BackgroundColor3 = Color3.fromRGB(35, 37, 39)
     card.BorderSizePixel = 0
     card.Parent = notifGui
-    local ncc = Instance.new("UICorner"); ncc.CornerRadius = UDim.new(0, 8); ncc.Parent = card
+    local ncc = Instance.new("UICorner"); ncc.CornerRadius = UDim.new(0, 6); ncc.Parent = card
 
-    -- Left icon (blue circle with ! like roblox notifications)
+    -- Blue "!" icon
     local iconBg = Instance.new("Frame")
     iconBg.Size = UDim2.new(0, 32, 0, 32); iconBg.Position = UDim2.new(0, 12, 0, 12)
     iconBg.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
@@ -167,11 +173,11 @@ local function showDiscordNotification()
     titleLbl.TextXAlignment = Enum.TextXAlignment.Left
     titleLbl.Parent = card
 
-    -- Body text
+    -- Body
     local bodyLbl = Instance.new("TextLabel")
     bodyLbl.Size = UDim2.new(1, -70, 0, 40); bodyLbl.Position = UDim2.new(0, 52, 0, 28)
     bodyLbl.BackgroundTransparency = 1
-    bodyLbl.Text = "У тебя может залагать"
+    bodyLbl.Text = "Your game may lag"
     bodyLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
     bodyLbl.Font = Enum.Font.Gotham; bodyLbl.TextSize = 13
     bodyLbl.TextWrapped = true
@@ -194,30 +200,24 @@ local function showDiscordNotification()
     discordBtn.Text = "Join Discord Server"
     discordBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     discordBtn.Font = Enum.Font.GothamBold; discordBtn.TextSize = 14
-    discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)  -- Discord blurple
+    discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
     discordBtn.AutoButtonColor = true
     discordBtn.Parent = card
     local dbc = Instance.new("UICorner"); dbc.CornerRadius = UDim.new(0, 6); dbc.Parent = discordBtn
 
-    -- Slide in from right
-    local inTween = game:GetService("TweenService"):Create(
-        card,
+    -- Slide in
+    local inTween = TweenService:Create(card,
         TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        { Position = UDim2.new(1, -360, 0, 24) }
-    )
+        { Position = UDim2.new(1, -370, 0, 24) })
     card.Position = UDim2.new(1, 20, 0, 24)
     inTween:Play()
 
     local function dismiss()
-        local outTween = game:GetService("TweenService"):Create(
-            card,
+        local outTween = TweenService:Create(card,
             TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-            { Position = UDim2.new(1, 20, 0, 24) }
-        )
+            { Position = UDim2.new(1, 20, 0, 24) })
         outTween:Play()
-        outTween.Completed:Connect(function()
-            pcall(function() notifGui:Destroy() end)
-        end)
+        outTween.Completed:Connect(function() pcall(function() notifGui:Destroy() end) end)
     end
 
     closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255) end)
@@ -230,7 +230,6 @@ local function showDiscordNotification()
         task.delay(1.5, dismiss)
     end)
 
-    -- Auto-dismiss after 20s
     task.delay(20, function()
         if notifGui and notifGui.Parent then dismiss() end
     end)
@@ -246,30 +245,21 @@ local Config = {
         Enabled = false,
         MaxDistForHighlight = 500,
         HighlightColor = Color3.fromRGB(255, 215, 0),
-        OutlineColor   = Color3.fromRGB(255, 240, 180),
-        TextColor      = Color3.fromRGB(255, 230, 150),
+        OutlineColor = Color3.fromRGB(255, 240, 180),
+        TextColor = Color3.fromRGB(255, 230, 150),
         TextSize = 14,
-        ShowName = true,
-        ShowHP = true,
-        ShowDistance = true,
-        NameColor     = Color3.fromRGB(255, 200, 80),
-        HPColor       = Color3.fromRGB(255, 170, 40),
+        ShowName = true, ShowHP = true, ShowDistance = true,
+        NameColor = Color3.fromRGB(255, 200, 80),
+        HPColor = Color3.fromRGB(255, 170, 40),
         DistanceColor = Color3.fromRGB(230, 190, 120),
         ShowTracers = false,
         TracerColor = Color3.fromRGB(255, 215, 0),
         TracerThickness = 1,
     },
     Aim = {
-        Enabled = false,
-        FOVRadius = 100,
-        Smoothness = 0.5,
-        MaxDistance = 500,
-        MinDot = 0.1,
-        MaxMovePerFrame = 60,
-        AimPart = "Head",
-        VerticalBlockEnabled = true,
-        VerticalBlockRadius = 3,
-        VerticalBlockMinHeight = 3,
+        Enabled = false, FOVRadius = 100, Smoothness = 0.5, MaxDistance = 500,
+        MinDot = 0.1, MaxMovePerFrame = 60, AimPart = "Head",
+        VerticalBlockEnabled = true, VerticalBlockRadius = 3, VerticalBlockMinHeight = 3,
         Whitelist = {},
     },
     NoShadows = { Enabled = false },
@@ -284,10 +274,8 @@ local Config = {
 --  FONTS
 -- ============================================================
 local FONT_OPTIONS = {
-    Ubuntu      = Enum.Font.Ubuntu,
-    Calibri     = Enum.Font.Gotham,
-    ComicSans   = Enum.Font.Cartoon,
-    Silkscreen  = Enum.Font.Arcade,
+    Ubuntu = Enum.Font.Ubuntu, Calibri = Enum.Font.Gotham,
+    ComicSans = Enum.Font.Cartoon, Silkscreen = Enum.Font.Arcade,
 }
 local FontRefs = {}
 local function addFont(el)
@@ -296,21 +284,19 @@ local function addFont(el)
 end
 local function applyFont()
     local f = FONT_OPTIONS[Config.Font] or Enum.Font.Gotham
-    for _, el in ipairs(FontRefs) do
-        pcall(function() el.Font = f end)
-    end
+    for _, el in ipairs(FontRefs) do pcall(function() el.Font = f end) end
 end
 
 -- ============================================================
---  THEME  (нейтральные кнопки и текст, без золота)
+--  THEME (нейтральные кнопки, без золота)
 -- ============================================================
 local DEFAULT_THEME = {
     Background = Color3.fromRGB(10, 8, 14),
-    Panel      = Color3.fromRGB(45, 35, 15),
-    Outline    = Color3.fromRGB(218, 165, 32),
-    Button     = Color3.fromRGB(38, 38, 38),    -- нейтральный V=15%
-    Accent     = Color3.fromRGB(255, 215, 0),
-    Text       = Color3.fromRGB(230, 230, 230), -- нейтральный V=90%
+    Panel = Color3.fromRGB(45, 35, 15),
+    Outline = Color3.fromRGB(218, 165, 32),
+    Button = Color3.fromRGB(38, 38, 38),
+    Accent = Color3.fromRGB(255, 215, 0),
+    Text = Color3.fromRGB(230, 230, 230),
 }
 local Theme = {}
 for k, v in pairs(DEFAULT_THEME) do Theme[k] = v end
@@ -318,19 +304,14 @@ for k, v in pairs(DEFAULT_THEME) do Theme[k] = v end
 local ThemeRefs = { bg = {}, panel = {}, stroke = {}, button = {}, text = {}, accent = {} }
 local SyncCallbacks = {}
 
-local function registerSync(fn)
-    table.insert(SyncCallbacks, fn)
-    fn()
-end
-local function syncAll()
-    for _, fn in ipairs(SyncCallbacks) do fn() end
-end
+local function registerSync(fn) table.insert(SyncCallbacks, fn); fn() end
+local function syncAll() for _, fn in ipairs(SyncCallbacks) do fn() end end
 
-local function addBg(el)     table.insert(ThemeRefs.bg, {el=el, p="BackgroundColor3"});     el.BackgroundColor3 = Theme.Background end
-local function addPanel(el)  table.insert(ThemeRefs.panel, {el=el, p="BackgroundColor3"});  el.BackgroundColor3 = Theme.Panel end
-local function addStroke(el) table.insert(ThemeRefs.stroke, {el=el, p="Color"});            el.Color = Theme.Outline end
-local function addBtn(el)    table.insert(ThemeRefs.button, {el=el, p="BackgroundColor3"}); el.BackgroundColor3 = Theme.Button end
-local function addText(el)   table.insert(ThemeRefs.text, {el=el, p="TextColor3"});         el.TextColor3 = Theme.Text end
+local function addBg(el) table.insert(ThemeRefs.bg, {el=el, p="BackgroundColor3"}); el.BackgroundColor3 = Theme.Background end
+local function addPanel(el) table.insert(ThemeRefs.panel, {el=el, p="BackgroundColor3"}); el.BackgroundColor3 = Theme.Panel end
+local function addStroke(el) table.insert(ThemeRefs.stroke, {el=el, p="Color"}); el.Color = Theme.Outline end
+local function addBtn(el) table.insert(ThemeRefs.button, {el=el, p="BackgroundColor3"}); el.BackgroundColor3 = Theme.Button end
+local function addText(el) table.insert(ThemeRefs.text, {el=el, p="TextColor3"}); el.TextColor3 = Theme.Text end
 local function addAccent(el) table.insert(ThemeRefs.accent, {el=el, p="BackgroundColor3"}); el.BackgroundColor3 = Theme.Accent end
 
 local function applyTheme()
@@ -356,15 +337,12 @@ local function getHighestGuiParent()
     return LocalPlayer:WaitForChild("PlayerGui")
 end
 
-local cursorGui
-local cursorImage
+local cursorGui, cursorImage
 
 local function createCursorGui()
     if cursorGui then pcall(function() cursorGui:Destroy() end) end
     local pg = getHighestGuiParent()
-    if pg:FindFirstChild("VagrantCursor") then
-        pcall(function() pg.VagrantCursor:Destroy() end)
-    end
+    if pg:FindFirstChild("VagrantCursor") then pcall(function() pg.VagrantCursor:Destroy() end) end
 
     cursorGui = Instance.new("ScreenGui")
     cursorGui.Name = "VagrantCursor"
@@ -382,10 +360,7 @@ local function createCursorGui()
     cursorImage.ZIndex = 2147483647
     cursorImage.Visible = false
     cursorImage.Parent = cursorGui
-
-    if CursorCfg.ImageId ~= "" then
-        cursorImage.Image = CursorCfg.ImageId
-    end
+    if CursorCfg.ImageId ~= "" then cursorImage.Image = CursorCfg.ImageId end
 end
 
 createCursorGui()
@@ -397,8 +372,7 @@ end
 local function applyCursorImage(id)
     if not id or id == "" then
         if cursorImage then cursorImage.Image = "" end
-        CursorCfg.ImageId = ""
-        return
+        CursorCfg.ImageId = ""; return
     end
     local cleanId = tostring(id):gsub("%s", "")
     local url
@@ -425,25 +399,14 @@ task.spawn(function()
         task.wait(1)
         if CursorCfg.Enabled then
             local pg = getHighestGuiParent()
-            if not cursorGui or not cursorGui.Parent or cursorGui.Parent ~= pg then
-                createCursorGui()
-            end
-
+            if not cursorGui or not cursorGui.Parent or cursorGui.Parent ~= pg then createCursorGui() end
             pcall(function() cursorGui.DisplayOrder = 2147483647 end)
             if cursorImage then
                 pcall(function() cursorImage.ZIndex = 2147483647 end)
-                if cursorImage.Image ~= CursorCfg.ImageId and CursorCfg.ImageId ~= "" then
-                    cursorImage.Image = CursorCfg.ImageId
-                end
+                if cursorImage.Image ~= CursorCfg.ImageId and CursorCfg.ImageId ~= "" then cursorImage.Image = CursorCfg.ImageId end
             end
-
-            if CursorCfg.HideDefault then
-                pcall(function() UserInputService.MouseIconEnabled = false end)
-            end
-
-            if cursorImage and CursorCfg.ImageId ~= "" then
-                cursorImage.Visible = true
-            end
+            if CursorCfg.HideDefault then pcall(function() UserInputService.MouseIconEnabled = false end) end
+            if cursorImage and CursorCfg.ImageId ~= "" then cursorImage.Visible = true end
         end
     end
 end)
@@ -583,10 +546,8 @@ local rgbSliders = {}
 
 local function makeRGBSlider(parent, channel, y)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 24)
-    row.Position = UDim2.new(0, 0, 0, y)
-    row.BackgroundTransparency = 1
-    row.Parent = parent
+    row.Size = UDim2.new(1, 0, 0, 24); row.Position = UDim2.new(0, 0, 0, y)
+    row.BackgroundTransparency = 1; row.Parent = parent
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(0, 20, 1, 0)
@@ -596,16 +557,14 @@ local function makeRGBSlider(parent, channel, y)
     addText(lbl); addFont(lbl)
 
     local bar = Instance.new("TextButton")
-    bar.Size = UDim2.new(1, -80, 0, 8)
-    bar.Position = UDim2.new(0, 20, 0, 8)
+    bar.Size = UDim2.new(1, -80, 0, 8); bar.Position = UDim2.new(0, 20, 0, 8)
     bar.BorderSizePixel = 0; bar.Text = ""; bar.AutoButtonColor = false
     bar.Parent = row
     addBtn(bar)
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(1, 0); bc.Parent = bar
 
     local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(1, 0, 1, 0)
-    fill.BorderSizePixel = 0; fill.Parent = bar
+    fill.Size = UDim2.new(1, 0, 1, 0); fill.BorderSizePixel = 0; fill.Parent = bar
     addAccent(fill)
     local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fill
 
@@ -638,13 +597,9 @@ addText(hexLbl); addFont(hexLbl)
 
 local hexBox = Instance.new("TextBox")
 hexBox.Size = UDim2.new(1, -36, 1, 0); hexBox.Position = UDim2.new(0, 36, 0, 0)
-hexBox.BackgroundColor3 = Theme.Background
-hexBox.BorderSizePixel = 0
-hexBox.Text = "#FFFFFF"
-hexBox.TextColor3 = Theme.Text
-hexBox.TextSize = 11
-hexBox.ClearTextOnFocus = false
-hexBox.TextXAlignment = Enum.TextXAlignment.Left
+hexBox.BackgroundColor3 = Theme.Background; hexBox.BorderSizePixel = 0
+hexBox.Text = "#FFFFFF"; hexBox.TextColor3 = Theme.Text; hexBox.TextSize = 11
+hexBox.ClearTextOnFocus = false; hexBox.TextXAlignment = Enum.TextXAlignment.Left
 hexBox.Parent = hexRow
 addFont(hexBox)
 local hbc = Instance.new("UICorner"); hbc.CornerRadius = UDim.new(0, 4); hbc.Parent = hexBox
@@ -657,48 +612,37 @@ previewRow.BackgroundTransparency = 1
 previewRow.Parent = cpCard
 
 local cpPreview = Instance.new("Frame")
-cpPreview.Size = UDim2.new(1, 0, 1, 0)
-cpPreview.BorderSizePixel = 0
-cpPreview.Parent = previewRow
+cpPreview.Size = UDim2.new(1, 0, 1, 0); cpPreview.BorderSizePixel = 0; cpPreview.Parent = previewRow
 local cpc = Instance.new("UICorner"); cpc.CornerRadius = UDim.new(0, 6); cpc.Parent = cpPreview
 local cps = Instance.new("UIStroke"); cps.Thickness = 1; cps.Parent = cpPreview
 addStroke(cps)
 
 local cpPreviewText = Instance.new("TextLabel")
-cpPreviewText.Size = UDim2.new(1, 0, 1, 0)
-cpPreviewText.BackgroundTransparency = 1
-cpPreviewText.Text = "#FFFFFF"
-cpPreviewText.TextSize = 13
+cpPreviewText.Size = UDim2.new(1, 0, 1, 0); cpPreviewText.BackgroundTransparency = 1
+cpPreviewText.Text = "#FFFFFF"; cpPreviewText.TextSize = 13
 cpPreviewText.TextColor3 = Color3.fromRGB(255, 255, 255)
 cpPreviewText.TextStrokeTransparency = 0
 cpPreviewText.Font = Enum.Font.GothamBold
 cpPreviewText.Parent = cpPreview
 
 local btnRow = Instance.new("Frame")
-btnRow.Size = UDim2.new(1, -24, 0, 32)
-btnRow.Position = UDim2.new(0, 12, 0, wheelSize + 252)
-btnRow.BackgroundTransparency = 1
-btnRow.Parent = cpCard
+btnRow.Size = UDim2.new(1, -24, 0, 32); btnRow.Position = UDim2.new(0, 12, 0, wheelSize + 252)
+btnRow.BackgroundTransparency = 1; btnRow.Parent = cpCard
 local btnRowLayout = Instance.new("UIListLayout")
 btnRowLayout.FillDirection = Enum.FillDirection.Horizontal
-btnRowLayout.Padding = UDim.new(0, 8)
-btnRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+btnRowLayout.Padding = UDim.new(0, 8); btnRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 btnRowLayout.Parent = btnRow
 
 local cpCancelBtn = Instance.new("TextButton")
-cpCancelBtn.Size = UDim2.new(0.5, -4, 1, 0)
-cpCancelBtn.BorderSizePixel = 0
-cpCancelBtn.Text = "Cancel"; cpCancelBtn.TextSize = 12
-cpCancelBtn.AutoButtonColor = true
+cpCancelBtn.Size = UDim2.new(0.5, -4, 1, 0); cpCancelBtn.BorderSizePixel = 0
+cpCancelBtn.Text = "Cancel"; cpCancelBtn.TextSize = 12; cpCancelBtn.AutoButtonColor = true
 cpCancelBtn.Parent = btnRow
 addBtn(cpCancelBtn); addText(cpCancelBtn); addFont(cpCancelBtn)
 local ccc = Instance.new("UICorner"); ccc.CornerRadius = UDim.new(0, 6); ccc.Parent = cpCancelBtn
 
 local cpApplyBtn = Instance.new("TextButton")
-cpApplyBtn.Size = UDim2.new(0.5, -4, 1, 0)
-cpApplyBtn.BorderSizePixel = 0
-cpApplyBtn.Text = "Apply"; cpApplyBtn.TextSize = 12
-cpApplyBtn.AutoButtonColor = true
+cpApplyBtn.Size = UDim2.new(0.5, -4, 1, 0); cpApplyBtn.BorderSizePixel = 0
+cpApplyBtn.Text = "Apply"; cpApplyBtn.TextSize = 12; cpApplyBtn.AutoButtonColor = true
 cpApplyBtn.Parent = btnRow
 addAccent(cpApplyBtn)
 cpApplyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -714,17 +658,13 @@ local cps_state = {
 
 local function toHex(col)
     return string.format("#%02X%02X%02X",
-        math.floor(col.R * 255 + 0.5),
-        math.floor(col.G * 255 + 0.5),
-        math.floor(col.B * 255 + 0.5))
+        math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5))
 end
 
 local function fromHex(s)
     s = s:gsub("#", "")
     if #s ~= 6 then return nil end
-    local r = tonumber(s:sub(1, 2), 16)
-    local g = tonumber(s:sub(3, 4), 16)
-    local b = tonumber(s:sub(5, 6), 16)
+    local r, g, b = tonumber(s:sub(1, 2), 16), tonumber(s:sub(3, 4), 16), tonumber(s:sub(5, 6), 16)
     if r and g and b then return Color3.fromRGB(r, g, b) end
     return nil
 end
@@ -741,9 +681,7 @@ end
 
 local function refreshUI()
     cps_state.currentColor = Color3.fromHSV(cps_state.hue, cps_state.sat, cps_state.val)
-
     updateCursorPos()
-
     valueFill.Size = UDim2.new(cps_state.val, 0, 1, 0)
     valueVal.Text = tostring(math.floor(cps_state.val * 100 + 0.5))
 
@@ -759,24 +697,16 @@ local function refreshUI()
     local brightness = (r + g + b) / 3
     cpPreviewText.TextColor3 = brightness > 0.5 and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
     cpPreviewText.Text = toHex(cps_state.currentColor)
-
-    if not hexBox:IsFocused() then
-        hexBox.Text = toHex(cps_state.currentColor)
-    end
-
-    if cps_state.onLiveChange then
-        cps_state.onLiveChange(cps_state.currentColor)
-    end
+    if not hexBox:IsFocused() then hexBox.Text = toHex(cps_state.currentColor) end
+    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.currentColor) end
 end
 
 local draggingWheel = false
 local function updateFromWheelInput(mx, my)
     local abs = wheelButton.AbsolutePosition
     local size = wheelButton.AbsoluteSize
-    local cx = abs.X + size.X / 2
-    local cy = abs.Y + size.Y / 2
-    local dx = mx - cx
-    local dy = my - cy
+    local cx, cy = abs.X + size.X / 2, abs.Y + size.Y / 2
+    local dx, dy = mx - cx, my - cy
     local radius = size.X / 2
     local dist = math.sqrt(dx * dx + dy * dy)
     if dist > radius then dist = radius end
@@ -920,8 +850,7 @@ local function getOrCreateTracer(player)
         line.Color = Config.ESP.TracerColor
         line.Thickness = Config.ESP.TracerThickness
         line.Transparency = 1
-        line.From = Vector2.new(0, 0)
-        line.To = Vector2.new(0, 0)
+        line.From = Vector2.new(0, 0); line.To = Vector2.new(0, 0)
         tracerLines[player] = line
     end
     return tracerLines[player]
@@ -929,9 +858,7 @@ end
 
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
-    if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then
-        line.Visible = false; return
-    end
+    if not Config.ESP.ShowTracers or distance >= Config.ESP.MaxDistForHighlight then line.Visible = false; return end
     local targetPos = character:FindFirstChild("Head") or rootPart
     local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
     if not onScreen or sp.Z <= 0 then line.Visible = false; return end
@@ -945,8 +872,7 @@ local function updateTracer(player, character, rootPart, distance)
 end
 
 local function hideTracer(player)
-    local line = tracerLines[player]
-    if line then line.Visible = false end
+    local line = tracerLines[player]; if line then line.Visible = false end
 end
 
 local function destroyTracer(player)
@@ -1022,7 +948,6 @@ local function updateESP(player)
         b.Adornee = character:FindFirstChild("Head") or rootPart
         b.Size = UDim2.new(0, 200, 0, 60); b.StudsOffset = Vector3.new(0, 3, 0)
         b.AlwaysOnTop = true; b.MaxDistance = math.huge
-
         local l = Instance.new("TextLabel")
         l.Name = "ESP_Label"; l.Size = UDim2.new(1, 0, 1, 0)
         l.BackgroundTransparency = 1
@@ -1187,7 +1112,6 @@ end)
 --  BLOCK 4: NO SHADOWS
 -- ============================================================
 local shadowConnection = nil
-
 local function applyNoShadows()
     if Config.NoShadows.Enabled then
         Lighting.GlobalShadows = false
@@ -1357,9 +1281,7 @@ function stopFreecam()
 end
 
 UserInputService.InputBegan:Connect(function(input, gp)
-    if TRACKED_KEYS[input.KeyCode] and Freecam.Active then
-        Freecam.Keys[input.KeyCode] = true
-    end
+    if TRACKED_KEYS[input.KeyCode] and Freecam.Active then Freecam.Keys[input.KeyCode] = true end
 end)
 UserInputService.InputEnded:Connect(function(input)
     if TRACKED_KEYS[input.KeyCode] then Freecam.Keys[input.KeyCode] = false end
@@ -1424,18 +1346,12 @@ main.Active = true
 main.Draggable = true
 main.Parent = screenGui
 addBg(main)
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 10); mainCorner.Parent = main
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Thickness = 1.5; mainStroke.Parent = main
+local mainCorner = Instance.new("UICorner"); mainCorner.CornerRadius = UDim.new(0, 10); mainCorner.Parent = main
+local mainStroke = Instance.new("UIStroke"); mainStroke.Thickness = 1.5; mainStroke.Parent = main
 addStroke(mainStroke)
 
--- ============================================================
---  RESIZE HANDLE
--- ============================================================
-local RESIZE_MIN_W = 550
-local RESIZE_MIN_H = 380
-
+-- Resize handle
+local RESIZE_MIN_W, RESIZE_MIN_H = 550, 380
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Name = "ResizeHandle"
 resizeHandle.Size = UDim2.new(0, 16, 0, 16)
@@ -1448,7 +1364,6 @@ resizeHandle.ZIndex = 10
 resizeHandle.Parent = main
 addAccent(resizeHandle)
 local rhc = Instance.new("UICorner"); rhc.CornerRadius = UDim.new(0, 4); rhc.Parent = resizeHandle
-
 for i = 0, 2 do
     local stroke = Instance.new("Frame")
     stroke.Size = UDim2.new(0, 2, 0, 2)
@@ -1461,14 +1376,12 @@ end
 
 local resizing = false
 local resizeStartSize, resizeStartMouse
-
 resizeHandle.MouseButton1Down:Connect(function()
     resizing = true
     main.Draggable = false
     resizeStartSize = main.AbsoluteSize
     resizeStartMouse = UserInputService:GetMouseLocation()
 end)
-
 UserInputService.InputChanged:Connect(function(input)
     if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
         local mp = UserInputService:GetMouseLocation()
@@ -1477,7 +1390,6 @@ UserInputService.InputChanged:Connect(function(input)
         main.Size = UDim2.new(0, newW, 0, newH)
     end
 end)
-
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 and resizing then
         resizing = false
@@ -1485,15 +1397,12 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- ============================================================
---  TITLE BAR
--- ============================================================
+-- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 48)
 titleBar.BorderSizePixel = 0; titleBar.Parent = main
 addPanel(titleBar)
-local tbCorner = Instance.new("UICorner")
-tbCorner.CornerRadius = UDim.new(0, 10); tbCorner.Parent = titleBar
+local tbCorner = Instance.new("UICorner"); tbCorner.CornerRadius = UDim.new(0, 10); tbCorner.Parent = titleBar
 
 local titleLbl = Instance.new("TextLabel")
 titleLbl.Size = UDim2.new(1, -12, 0, 26); titleLbl.Position = UDim2.new(0, 12, 0, 2)
@@ -1517,9 +1426,7 @@ subtitleLbl.Parent = titleBar
 addText(subtitleLbl)
 addFont(subtitleLbl)
 
--- ============================================================
---  CONTENT AREA
--- ============================================================
+-- Content area
 local contentFrame = Instance.new("Frame")
 contentFrame.Size = UDim2.new(0.8, -12, 1, -80)
 contentFrame.Position = UDim2.new(0, 8, 0, 56)
@@ -1537,9 +1444,7 @@ tabBarLayout.Padding = UDim.new(0, 6)
 tabBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabBarLayout.Parent = tabBar
 
--- ============================================================
---  HELPERS
--- ============================================================
+-- HELPERS
 local function makeSectionHeader(parent, text)
     local h = Instance.new("Frame")
     h.Size = UDim2.new(1, 0, 0, 22); h.BackgroundTransparency = 1; h.Parent = parent
@@ -1572,8 +1477,7 @@ local function makeToggle(parent, name, getter, setter, callback)
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -70, 1, 0); lbl.Position = UDim2.new(0, 14, 0, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name
-    lbl.TextSize = 12
+    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = btn
     addText(lbl); addFont(lbl)
 
@@ -1607,16 +1511,14 @@ local function makeSlider(parent, name, min, max, getter, setter, isInt, callbac
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size = UDim2.new(1, -80, 0, 18); nameLbl.Position = UDim2.new(0, 12, 0, 2)
-    nameLbl.BackgroundTransparency = 1; nameLbl.Text = name
-    nameLbl.TextSize = 12
+    nameLbl.BackgroundTransparency = 1; nameLbl.Text = name; nameLbl.TextSize = 12
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left; nameLbl.Parent = row
     addText(nameLbl); addFont(nameLbl)
 
     local valLbl = Instance.new("TextLabel")
     valLbl.Size = UDim2.new(0, 70, 0, 18); valLbl.Position = UDim2.new(1, -80, 0, 2)
     valLbl.BackgroundTransparency = 1
-    valLbl.TextSize = 12
-    valLbl.TextColor3 = Theme.Text
+    valLbl.TextSize = 12; valLbl.TextColor3 = Theme.Text
     valLbl.TextXAlignment = Enum.TextXAlignment.Right; valLbl.Parent = row
     table.insert(ThemeRefs.text, {el=valLbl, p="TextColor3"})
     addFont(valLbl)
@@ -1633,7 +1535,6 @@ local function makeSlider(parent, name, min, max, getter, setter, isInt, callbac
     local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fill
 
     local dragging = false
-
     registerSync(function()
         local value = getter()
         local rel = math.clamp((value - min) / (max - min), 0, 1)
@@ -1654,9 +1555,7 @@ local function makeSlider(parent, name, min, max, getter, setter, isInt, callbac
         dragging = true; updateFromX(UserInputService:GetMouseLocation().X)
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateFromX(input.Position.X)
-        end
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then updateFromX(input.Position.X) end
     end)
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
@@ -1672,8 +1571,7 @@ local function makeTextBox(parent, name, getter, setter, callback, placeholder)
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size = UDim2.new(1, -24, 0, 14); nameLbl.Position = UDim2.new(0, 12, 0, 2)
-    nameLbl.BackgroundTransparency = 1; nameLbl.Text = name
-    nameLbl.TextSize = 11
+    nameLbl.BackgroundTransparency = 1; nameLbl.Text = name; nameLbl.TextSize = 11
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left; nameLbl.Parent = row
     addText(nameLbl); addFont(nameLbl)
 
@@ -1732,8 +1630,7 @@ local function makeColorPicker(parent, name, getter, setter)
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -104, 1, 0); lbl.Position = UDim2.new(0, 10, 0, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name
-    lbl.TextSize = 11
+    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextSize = 11
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
     addText(lbl); addFont(lbl)
 
@@ -1741,35 +1638,26 @@ local function makeColorPicker(parent, name, getter, setter)
     preview.Size = UDim2.new(0, 22, 0, 20); preview.Position = UDim2.new(1, -96, 0, 5)
     preview.BorderSizePixel = 0; preview.Parent = row
     local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 4); pc.Parent = preview
-    local ps = Instance.new("UIStroke"); ps.Thickness = 1; ps.Color = Color3.fromRGB(120, 90, 40); ps.Parent = preview
+    local ps = Instance.new("UIStroke"); ps.Thickness = 1; ps.Color = Color3.fromRGB(120, 120, 120); ps.Parent = preview
 
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 68, 0, 20); btn.Position = UDim2.new(1, -70, 0, 5)
     btn.BorderSizePixel = 0
-    btn.Text = "Change"
-    btn.TextSize = 10
-    btn.AutoButtonColor = true
-    btn.Parent = row
+    btn.Text = "Change"; btn.TextSize = 10
+    btn.AutoButtonColor = true; btn.Parent = row
     addBtn(btn); addText(btn); addFont(btn)
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
 
-    registerSync(function()
-        preview.BackgroundColor3 = getter()
-    end)
+    registerSync(function() preview.BackgroundColor3 = getter() end)
 
     btn.MouseButton1Click:Connect(function()
-        openColorPicker(getter(), function(col)
-            setter(col)
-            syncAll()
-        end)
+        openColorPicker(getter(), function(col) setter(col); syncAll() end)
     end)
 
     return row
 end
 
--- ============================================================
---  TABS
--- ============================================================
+-- TABS
 local tabNames = { "Customization", "Game", "Game Customization" }
 local tabButtons, tabFrames = {}, {}
 
@@ -1817,30 +1705,13 @@ local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
 
--- ============================================================
---  TAB: CUSTOMIZATION
--- ============================================================
+-- TAB: CUSTOMIZATION
 makeSectionHeader(customTab, "THEME COLORS")
-
-makeColorPicker(customTab, "Background",
-    function() return Theme.Background end,
-    function(c) Theme.Background = c; applyTheme() end)
-
-makeColorPicker(customTab, "Buttons",
-    function() return Theme.Button end,
-    function(c) Theme.Button = c; applyTheme() end)
-
-makeColorPicker(customTab, "Outline",
-    function() return Theme.Outline end,
-    function(c) Theme.Outline = c; applyTheme() end)
-
-makeColorPicker(customTab, "Accent",
-    function() return Theme.Accent end,
-    function(c) Theme.Accent = c; applyTheme() end)
-
-makeColorPicker(customTab, "Text",
-    function() return Theme.Text end,
-    function(c) Theme.Text = c; applyTheme() end)
+makeColorPicker(customTab, "Background", function() return Theme.Background end, function(c) Theme.Background = c; applyTheme() end)
+makeColorPicker(customTab, "Buttons", function() return Theme.Button end, function(c) Theme.Button = c; applyTheme() end)
+makeColorPicker(customTab, "Outline", function() return Theme.Outline end, function(c) Theme.Outline = c; applyTheme() end)
+makeColorPicker(customTab, "Accent", function() return Theme.Accent end, function(c) Theme.Accent = c; applyTheme() end)
+makeColorPicker(customTab, "Text", function() return Theme.Text end, function(c) Theme.Text = c; applyTheme() end)
 
 makeSectionHeader(customTab, "FONT")
 
@@ -1849,8 +1720,7 @@ fontRow.Size = UDim2.new(1, 0, 0, 26); fontRow.BackgroundTransparency = 1
 fontRow.Parent = customTab
 local fontRowLayout = Instance.new("UIListLayout")
 fontRowLayout.FillDirection = Enum.FillDirection.Horizontal
-fontRowLayout.Padding = UDim.new(0, 4)
-fontRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+fontRowLayout.Padding = UDim.new(0, 4); fontRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 fontRowLayout.Parent = fontRow
 
 local fontButtons = {}
@@ -1869,29 +1739,24 @@ end
 for _, name in ipairs({"Ubuntu", "Calibri", "ComicSans", "Silkscreen"}) do
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(0.25, -3, 1, 0)
-    b.BorderSizePixel = 0
-    b.Text = name
+    b.BorderSizePixel = 0; b.Text = name
     b.Font = FONT_OPTIONS[name] or Enum.Font.Gotham
-    b.TextSize = 10
-    b.TextWrapped = true
+    b.TextSize = 10; b.TextWrapped = true
     b.Parent = fontRow
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = b
     table.insert(ThemeRefs.button, {el=b, p="BackgroundColor3"})
-    table.insert(ThemeRefs.text,   {el=b, p="TextColor3"})
+    table.insert(ThemeRefs.text, {el=b, p="TextColor3"})
     b.BackgroundColor3 = Theme.Button
     b.TextColor3 = Theme.Text
     fontButtons[name] = b
     b.MouseButton1Click:Connect(function()
-        Config.Font = name
-        applyFont()
-        syncFontButtons()
+        Config.Font = name; applyFont(); syncFontButtons()
     end)
 end
 syncFontButtons()
 registerSync(syncFontButtons)
 
 makeSectionHeader(customTab, "CUSTOM CURSOR")
-
 makeToggle(customTab, "Cursor Enabled",
     function() return Config.Cursor.Enabled end,
     function(v) Config.Cursor.Enabled = v end,
@@ -1921,13 +1786,9 @@ makeTextBox(customTab, "Image ID",
 makeSlider(customTab, "Size (px)", 8, 128,
     function() return Config.Cursor.Size end,
     function(v) Config.Cursor.Size = v end, true,
-    function(v)
-        if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end
-    end)
+    function(v) if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end end)
 
--- ============================================================
---  TAB: GAME
--- ============================================================
+-- TAB: GAME
 makeSectionHeader(gameTab, "MOVEMENT")
 makeToggle(gameTab, "Infinite Jump",
     function() return Config.InfiniteJump.Enabled end,
@@ -1985,8 +1846,7 @@ for _, opt in ipairs({"Head", "Torso"}) do
     b.TextColor3 = Theme.Text
     aimPartBtns[opt] = b
     b.MouseButton1Click:Connect(function()
-        Config.Aim.AimPart = opt
-        syncAimParts()
+        Config.Aim.AimPart = opt; syncAimParts()
     end)
 end
 syncAimParts()
@@ -2018,16 +1878,13 @@ makeSlider(gameTab, "Min height diff (studs)", 1, 20,
     function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
 
 makeSectionHeader(gameTab, "FREECAM")
-
 makeToggle(gameTab, "Freecam Enabled",
     function() return Config.Freecam.Enabled end,
     function(v) Config.Freecam.Enabled = v end,
     function(v) if v then startFreecam() else stopFreecam() end end)
-
 makeSlider(gameTab, "Flight speed", 0.2, 5.0,
     function() return Config.Freecam.Speed end,
     function(v) Config.Freecam.Speed = v end, false)
-
 makeSlider(gameTab, "Mouse sensitivity", 0.0005, 0.01,
     function() return Config.Freecam.Sensitivity end,
     function(v) Config.Freecam.Sensitivity = v end, false)
@@ -2041,7 +1898,6 @@ freecamHelp.TextWrapped = true; freecamHelp.Parent = gameTab
 addFont(freecamHelp)
 
 makeSectionHeader(gameTab, "SPECTATE")
-
 makeToggle(gameTab, "Spectate Enabled",
     function() return Spectate.Enabled end,
     function(v)
@@ -2126,11 +1982,8 @@ function refreshSpectateList()
         local wlc2 = Instance.new("UICorner"); wlc2.CornerRadius = UDim.new(0, 4); wlc2.Parent = wlBtn
 
         wlBtn.MouseButton1Click:Connect(function()
-            if Config.Aim.Whitelist[p.Name] then
-                Config.Aim.Whitelist[p.Name] = nil
-            else
-                Config.Aim.Whitelist[p.Name] = true
-            end
+            if Config.Aim.Whitelist[p.Name] then Config.Aim.Whitelist[p.Name] = nil
+            else Config.Aim.Whitelist[p.Name] = true end
             refreshSpectateList(); if refreshWhitelistUI then refreshWhitelistUI() end
         end)
 
@@ -2165,56 +2018,35 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
---  TAB: GAME CUSTOMIZATION
--- ============================================================
+-- TAB: GAME CUSTOMIZATION
 makeSectionHeader(gameCustTab, "ESP")
-
 makeToggle(gameCustTab, "ESP Enabled",
     function() return Config.ESP.Enabled end,
     function(v) Config.ESP.Enabled = v end)
-
 makeSlider(gameCustTab, "Highlight distance", 50, 2000,
     function() return Config.ESP.MaxDistForHighlight end,
     function(v) Config.ESP.MaxDistForHighlight = v end, true)
-
 makeSlider(gameCustTab, "Text size", 8, 32,
     function() return Config.ESP.TextSize end,
     function(v) Config.ESP.TextSize = v end, true)
 
 makeSectionHeader(gameCustTab, "ESP — ELEMENTS")
-
-makeToggle(gameCustTab, "Show Name",
-    function() return Config.ESP.ShowName end,
-    function(v) Config.ESP.ShowName = v end)
-
-makeToggle(gameCustTab, "Show HP",
-    function() return Config.ESP.ShowHP end,
-    function(v) Config.ESP.ShowHP = v end)
-
-makeToggle(gameCustTab, "Show Distance",
-    function() return Config.ESP.ShowDistance end,
-    function(v) Config.ESP.ShowDistance = v end)
+makeToggle(gameCustTab, "Show Name", function() return Config.ESP.ShowName end, function(v) Config.ESP.ShowName = v end)
+makeToggle(gameCustTab, "Show HP", function() return Config.ESP.ShowHP end, function(v) Config.ESP.ShowHP = v end)
+makeToggle(gameCustTab, "Show Distance", function() return Config.ESP.ShowDistance end, function(v) Config.ESP.ShowDistance = v end)
 
 makeSectionHeader(gameCustTab, "ESP — TRACERS")
-
 makeToggle(gameCustTab, "Tracers Enabled",
     function() return Config.ESP.ShowTracers end,
     function(v)
         Config.ESP.ShowTracers = v
-        if not v then
-            for player, _ in pairs(tracerLines) do hideTracer(player) end
-        end
+        if not v then for player in pairs(tracerLines) do hideTracer(player) end end
     end)
-
 makeSlider(gameCustTab, "Tracer thickness", 1, 5,
     function() return Config.ESP.TracerThickness end,
     function(v) Config.ESP.TracerThickness = v end,
     true,
-    function(v)
-        for _, line in pairs(tracerLines) do line.Thickness = v end
-    end)
-
+    function(v) for _, line in pairs(tracerLines) do line.Thickness = v end end)
 makeColorPicker(gameCustTab, "Tracer color",
     function() return Config.ESP.TracerColor end,
     function(c)
@@ -2223,26 +2055,11 @@ makeColorPicker(gameCustTab, "Tracer color",
     end)
 
 makeSectionHeader(gameCustTab, "ESP — COLORS")
-
-makeColorPicker(gameCustTab, "Name color",
-    function() return Config.ESP.NameColor end,
-    function(c) Config.ESP.NameColor = c end)
-
-makeColorPicker(gameCustTab, "HP color",
-    function() return Config.ESP.HPColor end,
-    function(c) Config.ESP.HPColor = c end)
-
-makeColorPicker(gameCustTab, "Distance color",
-    function() return Config.ESP.DistanceColor end,
-    function(c) Config.ESP.DistanceColor = c end)
-
-makeColorPicker(gameCustTab, "Highlight fill color",
-    function() return Config.ESP.HighlightColor end,
-    function(c) Config.ESP.HighlightColor = c end)
-
-makeColorPicker(gameCustTab, "Highlight outline color",
-    function() return Config.ESP.OutlineColor end,
-    function(c) Config.ESP.OutlineColor = c end)
+makeColorPicker(gameCustTab, "Name color", function() return Config.ESP.NameColor end, function(c) Config.ESP.NameColor = c end)
+makeColorPicker(gameCustTab, "HP color", function() return Config.ESP.HPColor end, function(c) Config.ESP.HPColor = c end)
+makeColorPicker(gameCustTab, "Distance color", function() return Config.ESP.DistanceColor end, function(c) Config.ESP.DistanceColor = c end)
+makeColorPicker(gameCustTab, "Highlight fill color", function() return Config.ESP.HighlightColor end, function(c) Config.ESP.HighlightColor = c end)
+makeColorPicker(gameCustTab, "Highlight outline color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
 
 makeSectionHeader(gameCustTab, "VISUAL")
 makeToggle(gameCustTab, "No Shadows",
@@ -2288,7 +2105,7 @@ refreshWhitelistUI = function()
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
     end
     local names = {}
-    for n, _ in pairs(Config.Aim.Whitelist) do table.insert(names, n) end
+    for n in pairs(Config.Aim.Whitelist) do table.insert(names, n) end
     table.sort(names)
     if #names == 0 then
         local e = Instance.new("TextLabel")
@@ -2358,14 +2175,9 @@ end)
 
 refreshWhitelistUI()
 
--- ============================================================
---  F1 — TOGGLE MENU
--- ============================================================
+-- F1 — TOGGLE
 local menuOpen = true
-local function setMenuOpen(state)
-    menuOpen = state
-    main.Visible = state
-end
+local function setMenuOpen(state) menuOpen = state; main.Visible = state end
 
 switchTab("Customization")
 setMenuOpen(true)
@@ -2374,9 +2186,7 @@ syncFontButtons()
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.F1 then
-        setMenuOpen(not menuOpen)
-    end
+    if input.KeyCode == Enum.KeyCode.F1 then setMenuOpen(not menuOpen) end
 end)
 
 print("[Vagrant Survival Best Script by Dokoo2] Loaded. F1 to toggle menu.")
