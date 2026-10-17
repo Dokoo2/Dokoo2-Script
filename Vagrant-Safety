@@ -1,0 +1,245 @@
+-- ============================================================
+--  ROBLOX-STYLE NOTIFICATION  (remastered)
+--  требует в внешнем scope: guiParent, openDiscord()
+-- ============================================================
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+
+local NOTIF = {
+    WIDTH       = 340,
+    HEIGHT      = 180,
+    MARGIN      = 24,
+    PADDING     = 14,
+    ICON_SIZE   = 36,
+    BTN_HEIGHT  = 40,
+    AUTO_DISMISS= 20,
+    SOUND_ID    = "rbxassetid://4590662766",
+    SOUND_VOL   = 0.35,
+}
+
+-- Отслеживаем открытые нотификации, чтобы они не накладывались друг на друга
+local _activeNotifications = {}
+local function stackOffset()
+    local total = 0
+    for _, card in pairs(_activeNotifications) do
+        if card and card.Parent then total = total + NOTIF.HEIGHT + 8 end
+    end
+    return total
+end
+
+local function playNotifSound()
+    local sound = Instance.new("Sound")
+    sound.SoundId = NOTIF.SOUND_ID
+    sound.Volume  = NOTIF.SOUND_VOL
+    sound.Parent  = SoundService
+    sound:Play()
+    -- Плавное затухание, чтобы звук не обрывался резко
+    task.spawn(function()
+        task.wait(0.4)
+        local t0 = tick()
+        local dur = 0.6
+        while sound.Parent and tick() - t0 < dur do
+            local a = 1 - (tick() - t0) / dur
+            pcall(function() sound.Volume = NOTIF.SOUND_VOL * math.clamp(a, 0, 1) end)
+            task.wait(0.05)
+        end
+        pcall(function() sound:Destroy() end)
+    end)
+end
+
+local function showDiscordNotification()
+    playNotifSound()
+
+    local notifGui = Instance.new("ScreenGui")
+    notifGui.Name = "VagrantNotif"
+    notifGui.ResetOnSpawn = false
+    notifGui.IgnoreGuiInset = true
+    notifGui.DisplayOrder = 9998
+    notifGui.Parent = guiParent
+
+    local offsetY = NOTIF.MARGIN + stackOffset()
+    local shownPos = UDim2.new(1, -(NOTIF.WIDTH + NOTIF.MARGIN), 0, offsetY)
+    local hiddenPos = UDim2.new(1, 20, 0, offsetY)
+
+    -- ==== CARD ====
+    local card = Instance.new("Frame")
+    card.Size             = UDim2.new(0, NOTIF.WIDTH, 0, NOTIF.HEIGHT)
+    card.Position         = hiddenPos
+    card.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+    card.BorderSizePixel  = 0
+    card.ClipsDescendants = true
+    card.Parent           = notifGui
+
+    local cardCorner = Instance.new("UICorner")
+    cardCorner.CornerRadius = UDim.new(0, 8)
+    cardCorner.Parent = card
+
+    local cardStroke = Instance.new("UIStroke")
+    cardStroke.Color            = Color3.fromRGB(58, 58, 58)
+    cardStroke.Thickness        = 1
+    cardStroke.Transparency     = 0.4
+    cardStroke.Parent = card
+
+    _activeNotifications[notifGui] = card
+
+    -- ==== LEFT ICON ====
+    local iconBg = Instance.new("Frame")
+    iconBg.Size             = UDim2.new(0, NOTIF.ICON_SIZE, 0, NOTIF.ICON_SIZE)
+    iconBg.Position         = UDim2.new(0, NOTIF.PADDING, 0, NOTIF.PADDING)
+    iconBg.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
+    iconBg.BorderSizePixel  = 0
+    iconBg.Parent           = card
+
+    local iconCorner = Instance.new("UICorner")
+    iconCorner.CornerRadius = UDim.new(1, 0)
+    iconCorner.Parent = iconBg
+
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Size                  = UDim2.new(1, 0, 1, 0)
+    iconLbl.BackgroundTransparency= 1
+    iconLbl.Text                  = "!"
+    iconLbl.TextColor3            = Color3.fromRGB(255, 255, 255)
+    iconLbl.Font                  = Enum.Font.GothamBold
+    iconLbl.TextSize              = 22
+    iconLbl.Parent                = iconBg
+
+    -- ==== TITLE ====
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size              = UDim2.new(1, -(NOTIF.PADDING * 2 + NOTIF.ICON_SIZE + 30), 0, 18)
+    titleLbl.Position          = UDim2.new(0, NOTIF.PADDING * 2 + NOTIF.ICON_SIZE, 0, NOTIF.PADDING)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text              = "Warning"
+    titleLbl.TextColor3        = Color3.fromRGB(255, 255, 255)
+    titleLbl.Font              = Enum.Font.GothamBold
+    titleLbl.TextSize          = 15
+    titleLbl.TextXAlignment    = Enum.TextXAlignment.Left
+    titleLbl.Parent            = card
+
+    -- ==== BODY ====
+    local bodyLbl = Instance.new("TextLabel")
+    bodyLbl.Size              = UDim2.new(1, -(NOTIF.PADDING * 2 + NOTIF.ICON_SIZE + 8), 0, 42)
+    bodyLbl.Position          = UDim2.new(0, NOTIF.PADDING * 2 + NOTIF.ICON_SIZE, 0, NOTIF.PADDING + 22)
+    bodyLbl.BackgroundTransparency = 1
+    bodyLbl.Text              = "У тебя может залагать"
+    bodyLbl.TextColor3        = Color3.fromRGB(190, 190, 190)
+    bodyLbl.Font              = Enum.Font.Gotham
+    bodyLbl.TextSize          = 13
+    bodyLbl.TextWrapped       = true
+    bodyLbl.TextXAlignment    = Enum.TextXAlignment.Left
+    bodyLbl.TextYAlignment    = Enum.TextYAlignment.Top
+    bodyLbl.Parent            = card
+
+    -- ==== CLOSE BUTTON ====
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size                  = UDim2.new(0, 26, 0, 26)
+    closeBtn.Position              = UDim2.new(1, -34, 0, 6)
+    closeBtn.BackgroundTransparency= 1
+    closeBtn.Text                  = "✕"
+    closeBtn.TextColor3            = Color3.fromRGB(160, 160, 160)
+    closeBtn.TextSize              = 14
+    closeBtn.Font                  = Enum.Font.GothamBold
+    closeBtn.AutoButtonColor       = false
+    closeBtn.Parent                = card
+
+    closeBtn.MouseEnter:Connect(function()
+        closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    closeBtn.MouseLeave:Connect(function()
+        closeBtn.TextColor3 = Color3.fromRGB(160, 160, 160)
+    end)
+
+    -- ==== DISCORD BUTTON ====
+    local discordBtn = Instance.new("TextButton")
+    discordBtn.Size             = UDim2.new(1, -NOTIF.PADDING * 2, 0, NOTIF.BTN_HEIGHT)
+    discordBtn.Position         = UDim2.new(0, NOTIF.PADDING, 1, -(NOTIF.BTN_HEIGHT + NOTIF.PADDING + 6))
+    discordBtn.BorderSizePixel  = 0
+    discordBtn.Text             = "Join Discord Server"
+    discordBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+    discordBtn.Font             = Enum.Font.GothamBold
+    discordBtn.TextSize         = 14
+    discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    discordBtn.AutoButtonColor  = false
+    discordBtn.Parent           = card
+
+    local dbCorner = Instance.new("UICorner")
+    dbCorner.CornerRadius = UDim.new(0, 6)
+    dbCorner.Parent = discordBtn
+
+    discordBtn.MouseEnter:Connect(function()
+        TweenService:Create(discordBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(102, 116, 255),
+        }):Play()
+    end)
+    discordBtn.MouseLeave:Connect(function()
+        TweenService:Create(discordBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(88, 101, 242),
+        }):Play()
+    end)
+
+    -- ==== PROGRESS BAR (автозакрытие) ====
+    local progressBg = Instance.new("Frame")
+    progressBg.Size             = UDim2.new(1, -NOTIF.PADDING * 2, 0, 3)
+    progressBg.Position         = UDim2.new(0, NOTIF.PADDING, 1, -4)
+    progressBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    progressBg.BorderSizePixel  = 0
+    progressBg.Parent           = card
+
+    local pbCorner = Instance.new("UICorner")
+    pbCorner.CornerRadius = UDim.new(1, 0)
+    pbCorner.Parent = progressBg
+
+    local progressFill = Instance.new("Frame")
+    progressFill.Size             = UDim2.new(1, 0, 1, 0)
+    progressFill.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
+    progressFill.BorderSizePixel  = 0
+    progressFill.Parent           = progressBg
+
+    local pfCorner = Instance.new("UICorner")
+    pfCorner.CornerRadius = UDim.new(1, 0)
+    pfCorner.Parent = progressFill
+
+    local progressTween = TweenService:Create(
+        progressFill,
+        TweenInfo.new(NOTIF.AUTO_DISMISS, Enum.EasingStyle.Linear),
+        { Size = UDim2.new(0, 0, 1, 0) }
+    )
+    progressTween:Play()
+
+    -- ==== SLIDE-IN ====
+    local inTween = TweenService:Create(
+        card,
+        TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        { Position = shownPos }
+    )
+    inTween:Play()
+
+    -- ==== DISMISS ====
+    local dismissed = false
+    local function dismiss()
+        if dismissed then return end
+        dismissed = true
+        progressTween:Cancel()
+
+        local outTween = TweenService:Create(
+            card,
+            TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            { Position = hiddenPos }
+        )
+        outTween:Play()
+        outTween.Completed:Connect(function()
+            _activeNotifications[notifGui] = nil
+            pcall(function() notifGui:Destroy() end)
+        end)
+    end
+
+    closeBtn.MouseButton1Click:Connect(dismiss)
+
+    discordBtn.MouseButton1Click:Connect(function()
+        local ok = pcall(openDiscord)
+        discordBtn.Text = ok and "Link copied / opened ✓" or "Copy failed"
+        task.delay(1.2, dismiss)
+    end)
+
+    -- ==== AUTO-DISMISS ====
+    task.delay(NOTIF.AUTO_DISMISS, dismiss)
+end
