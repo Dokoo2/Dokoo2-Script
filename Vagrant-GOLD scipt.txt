@@ -259,11 +259,6 @@ local Config = {
         VerticalBlockEnabled = true, VerticalBlockRadius = 3, VerticalBlockMinHeight = 3,
         Whitelist = {},
     },
-    Meme = {
-        Enabled = false,
-        Texture = "rbxassetid://11176073582",
-        MaxDistance = 500,
-    },
     NoShadows = { Enabled = false },
     InfiniteJump = { Enabled = false },
     Cursor = { Enabled = false, ImageId = "", Size = 32, HideDefault = true },
@@ -929,7 +924,7 @@ local function openColorPicker(initialColor, onChange)
 end
 
 -- ============================================================
---  BLOCK 1: ESP (whitelist-aware)
+--  BLOCK 1: ESP  (whitelist-aware)
 -- ============================================================
 local espHighlights, espBillboards = {}, {}
 local tracerLines = {}
@@ -949,6 +944,7 @@ end
 
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
+    -- Skip tracers for whitelisted players
     if not Config.ESP.ShowTracers
         or distance >= Config.ESP.MaxDistForHighlight
         or Config.Aim.Whitelist[player.Name] then
@@ -1014,6 +1010,7 @@ local function updateESP(player)
 
     updateTracer(player, character, rootPart, distance)
 
+    -- Whitelist-aware highlight colors
     local isWhitelisted = Config.Aim.Whitelist[player.Name] == true
     local useWLColors = isWhitelisted and Config.ESP.WhitelistHighlight.Enabled
     local fillCol, outlineCol
@@ -1092,79 +1089,10 @@ for _, p in ipairs(Players:GetPlayers()) do setupPlayer(p) end
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(p) cleanupESPForPlayer(p); destroyTracer(p) end)
 
--- ============================================================
---  BLOCK 1.5: MEME FACE (teammates only)
--- ============================================================
-local memeDecals = {}
-
-local function isTeammate(player)
-    if player == LocalPlayer then return false end
-    if Config.Aim.Whitelist[player.Name] then return true end
-    if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then return true end
-    return false
-end
-
-local function cleanupMemeForPlayer(player)
-    local d = memeDecals[player]
-    if d then pcall(function() d:Destroy() end); memeDecals[player] = nil end
-end
-
-local function updateMemeDecal(player)
-    if player == LocalPlayer then return end
-
-    local function removeDecal()
-        local d = memeDecals[player]
-        if d then pcall(function() d:Destroy() end); memeDecals[player] = nil end
-    end
-
-    if not Config.Meme.Enabled then removeDecal(); return end
-
-    local character = player.Character
-    if not character or not character.Parent then removeDecal(); return end
-    local head = character:FindFirstChild("Head")
-    if not head then removeDecal(); return end
-
-    if not isTeammate(player) then removeDecal(); return end
-
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    local distance
-    if rootPart then
-        distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
-    else
-        distance = (head.Position - Camera.CFrame.Position).Magnitude
-    end
-
-    local decal = memeDecals[player]
-    if not decal or not decal.Parent then
-        decal = Instance.new("Decal")
-        decal.Name = "VagrantMemeFace"
-        decal.Face = Enum.NormalId.Front
-        decal.Texture = Config.Meme.Texture
-        decal.Transparency = 1
-        decal.Parent = head
-        memeDecals[player] = decal
-    end
-
-    if decal.Texture ~= Config.Meme.Texture then
-        decal.Texture = Config.Meme.Texture
-    end
-
-    decal.Transparency = (distance <= Config.Meme.MaxDistance) and 0 or 1
-end
-
--- per-frame ESP + meme update
 RunService.RenderStepped:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            updateESP(p)
-            updateMemeDecal(p)
-        end
+        if p ~= LocalPlayer then updateESP(p) end
     end
-end)
-
--- extra cleanup on character/player removal
-Players.PlayerRemoving:Connect(function(p)
-    cleanupMemeForPlayer(p)
 end)
 
 -- ============================================================
@@ -1960,6 +1888,7 @@ makeSlider(customTab, "Size (px)", 8, 128,
     function(v) Config.Cursor.Size = v end, true,
     function(v) if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end end)
 
+-- CHANGELOG (bottom of Customization tab)
 makeSectionHeader(customTab, "CHANGELOG")
 
 local changelogBtn = Instance.new("TextButton")
@@ -2247,6 +2176,7 @@ makeColorPicker(gameCustTab, "Distance color", function() return Config.ESP.Dist
 makeColorPicker(gameCustTab, "Highlight fill color", function() return Config.ESP.HighlightColor end, function(c) Config.ESP.HighlightColor = c end)
 makeColorPicker(gameCustTab, "Highlight outline color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
 
+-- WHITELIST HIGHLIGHT COLORS (new)
 makeSectionHeader(gameCustTab, "WHITELIST — HIGHLIGHT")
 makeToggle(gameCustTab, "Whitelist highlight enabled",
     function() return Config.ESP.WhitelistHighlight.Enabled end,
@@ -2257,22 +2187,6 @@ makeColorPicker(gameCustTab, "Whitelist fill color",
 makeColorPicker(gameCustTab, "Whitelist outline color",
     function() return Config.ESP.WhitelistHighlight.OutlineColor end,
     function(c) Config.ESP.WhitelistHighlight.OutlineColor = c end)
-
-makeSectionHeader(gameCustTab, "MEME — TEAMMATES")
-makeToggle(gameCustTab, "Meme face on teammates",
-    function() return Config.Meme.Enabled end,
-    function(v) Config.Meme.Enabled = v end)
-makeSlider(gameCustTab, "Meme visibility distance", 50, 2000,
-    function() return Config.Meme.MaxDistance end,
-    function(v) Config.Meme.MaxDistance = v end, true)
-
-local memeHelp = Instance.new("TextLabel")
-memeHelp.Size = UDim2.new(1, 0, 0, 28); memeHelp.BackgroundTransparency = 1
-memeHelp.Text = "Teammate = whitelisted OR same Team.\nMeme face hides beyond distance above."
-memeHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
-memeHelp.TextSize = 10
-memeHelp.TextWrapped = true; memeHelp.Parent = gameCustTab
-addFont(memeHelp)
 
 makeSectionHeader(gameCustTab, "VISUAL")
 makeToggle(gameCustTab, "No Shadows",
