@@ -431,8 +431,8 @@ clBackdrop.ZIndex = 1
 clBackdrop.Parent = clGui
 
 local clCard = Instance.new("Frame")
-clCard.Size = UDim2.new(0, 440, 0, 300)
-clCard.Position = UDim2.new(0.5, -220, 0.5, -150)
+clCard.Size = UDim2.new(0, 460, 0, 360)
+clCard.Position = UDim2.new(0.5, -230, 0.5, -180)
 clCard.BorderSizePixel = 0
 clCard.Active = true
 clCard.ZIndex = 2
@@ -474,9 +474,17 @@ local clc = Instance.new("UICorner"); clc.CornerRadius = UDim.new(0, 4); clc.Par
 local clBody = Instance.new("TextLabel")
 clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 42)
 clBody.BackgroundTransparency = 1
-clBody.Text = "Updated The Golden UI\n-Made a button with discord link & made a warning that tells game may laggy"
+clBody.Text =
+    "Updated The Golden UI\n" ..
+    "-Added Discord button + \"game may lag\" warning\n" ..
+    "-Added View Changelog button (bottom of Customization)\n" ..
+    "-Added resizable menu with proportional buttons\n" ..
+    "-Whitelisted players now highlighted in green with white outline\n" ..
+    "-Tracers no longer show for whitelisted players\n" ..
+    "-Removed teamcheck from aim (aims at everyone)\n" ..
+    "-Removed meme face feature"
 clBody.TextColor3 = Theme.Text
-clBody.TextSize = 13
+clBody.TextSize = 12
 clBody.TextWrapped = true
 clBody.TextXAlignment = Enum.TextXAlignment.Left
 clBody.TextYAlignment = Enum.TextYAlignment.Top
@@ -924,7 +932,7 @@ local function openColorPicker(initialColor, onChange)
 end
 
 -- ============================================================
---  BLOCK 1: ESP  (whitelist-aware)
+--  BLOCK 1: ESP (whitelist-aware)
 -- ============================================================
 local espHighlights, espBillboards = {}, {}
 local tracerLines = {}
@@ -944,7 +952,6 @@ end
 
 local function updateTracer(player, character, rootPart, distance)
     local line = getOrCreateTracer(player)
-    -- Skip tracers for whitelisted players
     if not Config.ESP.ShowTracers
         or distance >= Config.ESP.MaxDistForHighlight
         or Config.Aim.Whitelist[player.Name] then
@@ -1010,7 +1017,6 @@ local function updateESP(player)
 
     updateTracer(player, character, rootPart, distance)
 
-    -- Whitelist-aware highlight colors
     local isWhitelisted = Config.Aim.Whitelist[player.Name] == true
     local useWLColors = isWhitelisted and Config.ESP.WhitelistHighlight.Enabled
     local fillCol, outlineCol
@@ -1096,7 +1102,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2: AIM
+--  BLOCK 2: AIM  (no whitelist/team check)
 -- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
@@ -1131,7 +1137,7 @@ local function isTargetDirectlyAboveOrBelow()
     if not myRoot then return false end
     local myPos = myRoot.Position
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
+        if player == LocalPlayer then continue end
         local char = player.Character
         if not char or not char.Parent then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -1154,7 +1160,7 @@ local function getClosestPlayerToCursor()
     local cameraPos = Camera.CFrame.Position
     local cameraLook = Camera.CFrame.LookVector
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
+        if player == LocalPlayer then continue end
         local character = player.Character
         if not character or not character.Parent then continue end
         local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -1888,7 +1894,6 @@ makeSlider(customTab, "Size (px)", 8, 128,
     function(v) Config.Cursor.Size = v end, true,
     function(v) if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end end)
 
--- CHANGELOG (bottom of Customization tab)
 makeSectionHeader(customTab, "CHANGELOG")
 
 local changelogBtn = Instance.new("TextButton")
@@ -2176,7 +2181,6 @@ makeColorPicker(gameCustTab, "Distance color", function() return Config.ESP.Dist
 makeColorPicker(gameCustTab, "Highlight fill color", function() return Config.ESP.HighlightColor end, function(c) Config.ESP.HighlightColor = c end)
 makeColorPicker(gameCustTab, "Highlight outline color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
 
--- WHITELIST HIGHLIGHT COLORS (new)
 makeSectionHeader(gameCustTab, "WHITELIST — HIGHLIGHT")
 makeToggle(gameCustTab, "Whitelist highlight enabled",
     function() return Config.ESP.WhitelistHighlight.Enabled end,
@@ -2194,7 +2198,7 @@ makeToggle(gameCustTab, "No Shadows",
     function(v) Config.NoShadows.Enabled = v end,
     function() applyNoShadows() end)
 
-makeSectionHeader(gameCustTab, "WHITELIST — Aim ignores these players")
+makeSectionHeader(gameCustTab, "WHITELIST — ESP highlights only (aim ignores off)")
 
 local wlListFrame
 local refreshWhitelistUI
