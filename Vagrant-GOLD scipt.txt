@@ -479,9 +479,9 @@ clBody.Text =
     "-Added Discord button + \"game may lag\" warning\n" ..
     "-Added View Changelog button (bottom of Customization)\n" ..
     "-Added resizable menu with proportional buttons\n" ..
-    "-Whitelisted players now highlighted in green with white outline\n" ..
-    "-Tracers no longer show for whitelisted players\n" ..
-    "-Removed teamcheck from aim (aims at everyone)\n" ..
+    "-Whitelisted players highlighted in green with white outline\n" ..
+    "-Tracers hidden for whitelisted players\n" ..
+    "-Whitelist excludes players from aim (restored)\n" ..
     "-Removed meme face feature"
 clBody.TextColor3 = Theme.Text
 clBody.TextSize = 12
@@ -1102,7 +1102,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2: AIM  (no whitelist/team check)
+--  BLOCK 2: AIM  (whitelist-aware, restored)
 -- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
@@ -1137,7 +1137,8 @@ local function isTargetDirectlyAboveOrBelow()
     if not myRoot then return false end
     local myPos = myRoot.Position
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
+        -- whitelist check restored
+        if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
         local char = player.Character
         if not char or not char.Parent then continue end
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -1160,7 +1161,8 @@ local function getClosestPlayerToCursor()
     local cameraPos = Camera.CFrame.Position
     local cameraLook = Camera.CFrame.LookVector
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
+        -- whitelist check restored
+        if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
         local character = player.Character
         if not character or not character.Parent then continue end
         local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -2198,7 +2200,7 @@ makeToggle(gameCustTab, "No Shadows",
     function(v) Config.NoShadows.Enabled = v end,
     function() applyNoShadows() end)
 
-makeSectionHeader(gameCustTab, "WHITELIST — ESP highlights only (aim ignores off)")
+makeSectionHeader(gameCustTab, "WHITELIST — Aim ignores these players")
 
 local wlListFrame
 local refreshWhitelistUI
