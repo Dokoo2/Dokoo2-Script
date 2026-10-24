@@ -119,14 +119,21 @@ showSplash()
 -- ============================================================
 --  ROBLOX-STYLE NOTIFICATION
 -- ============================================================
-local function openDiscord()
-    local url = "https://discord.gg/7fvEdptb"
-    if type(setclipboard) == "function" then pcall(setclipboard, url) end
-    if type(openbrowser) == "function" then pcall(openbrowser, url)
-    elseif type(request) == "function" then pcall(request, { Url = url, Method = "GET" }) end
+local _activeNotifs = {}
+
+local function _repositionNotifs()
+    for i, entry in ipairs(_activeNotifs) do
+        if entry.card and entry.card.Parent then
+            TweenService:Create(entry.card, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -370, 0, 24 + (i - 1) * 110)
+            }):Play()
+        end
+    end
 end
 
-local function showDiscordNotification()
+local function showNotification(title, body, duration, playSound)
+    if playSound == nil then playSound = true end
+
     local notifGui = Instance.new("ScreenGui")
     notifGui.Name = "VagrantNotif"
     notifGui.ResetOnSpawn = false
@@ -134,16 +141,18 @@ local function showDiscordNotification()
     notifGui.DisplayOrder = 9998
     notifGui.Parent = guiParent
 
-    local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://4590662766"
-    sound.Volume = 0.5
-    sound.Parent = SoundService
-    pcall(function() sound:Play() end)
-    task.delay(6, function() pcall(function() sound:Destroy() end) end)
+    if playSound then
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://4590662766"
+        sound.Volume = 0.5
+        sound.Parent = SoundService
+        pcall(function() sound:Play() end)
+        task.delay(6, function() pcall(function() sound:Destroy() end) end)
+    end
 
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 350, 0, 172)
-    card.Position = UDim2.new(1, -370, 0, 24)
+    card.Size = UDim2.new(0, 350, 0, 100)
+    card.Position = UDim2.new(1, 20, 0, 24)
     card.BackgroundColor3 = Color3.fromRGB(35, 37, 39)
     card.BorderSizePixel = 0
     card.Parent = notifGui
@@ -163,7 +172,7 @@ local function showDiscordNotification()
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Size = UDim2.new(1, -70, 0, 22); titleLbl.Position = UDim2.new(0, 52, 0, 8)
     titleLbl.BackgroundTransparency = 1
-    titleLbl.Text = "Warning"
+    titleLbl.Text = title
     titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
     titleLbl.Font = Enum.Font.GothamBold; titleLbl.TextSize = 15
     titleLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -172,7 +181,7 @@ local function showDiscordNotification()
     local bodyLbl = Instance.new("TextLabel")
     bodyLbl.Size = UDim2.new(1, -70, 0, 40); bodyLbl.Position = UDim2.new(0, 52, 0, 28)
     bodyLbl.BackgroundTransparency = 1
-    bodyLbl.Text = "Your game may lag"
+    bodyLbl.Text = body
     bodyLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
     bodyLbl.Font = Enum.Font.Gotham; bodyLbl.TextSize = 13
     bodyLbl.TextWrapped = true
@@ -187,47 +196,43 @@ local function showDiscordNotification()
     closeBtn.TextSize = 14; closeBtn.Font = Enum.Font.GothamBold
     closeBtn.AutoButtonColor = false; closeBtn.Parent = card
 
-    local discordBtn = Instance.new("TextButton")
-    discordBtn.Size = UDim2.new(1, -24, 0, 44); discordBtn.Position = UDim2.new(0, 12, 0, 112)
-    discordBtn.BorderSizePixel = 0
-    discordBtn.Text = "Join Discord Server"
-    discordBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    discordBtn.Font = Enum.Font.GothamBold; discordBtn.TextSize = 14
-    discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    discordBtn.AutoButtonColor = true
-    discordBtn.Parent = card
-    local dbc = Instance.new("UICorner"); dbc.CornerRadius = UDim.new(0, 6); dbc.Parent = discordBtn
+    local entry = {card = card, gui = notifGui}
+    table.insert(_activeNotifs, entry)
 
-    local inTween = TweenService:Create(card,
+    local targetY = 24 + (#_activeNotifs - 1) * 110
+    TweenService:Create(card,
         TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        { Position = UDim2.new(1, -370, 0, 24) })
-    card.Position = UDim2.new(1, 20, 0, 24)
-    inTween:Play()
+        { Position = UDim2.new(1, -370, 0, targetY) }):Play()
 
+    local dismissed = false
     local function dismiss()
+        if dismissed then return end
+        dismissed = true
+        for i, n in ipairs(_activeNotifs) do
+            if n == entry then table.remove(_activeNotifs, i); break end
+        end
         local outTween = TweenService:Create(card,
             TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-            { Position = UDim2.new(1, 20, 0, 24) })
+            { Position = UDim2.new(1, 20, 0, card.Position.Y.Offset) })
         outTween:Play()
-        outTween.Completed:Connect(function() pcall(function() notifGui:Destroy() end) end)
+        outTween.Completed:Connect(function()
+            pcall(function() notifGui:Destroy() end)
+            _repositionNotifs()
+        end)
     end
 
     closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255) end)
     closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(180, 180, 180) end)
     closeBtn.MouseButton1Click:Connect(dismiss)
 
-    discordBtn.MouseButton1Click:Connect(function()
-        openDiscord()
-        discordBtn.Text = "Link copied / opened ✓"
-        task.delay(1.5, dismiss)
-    end)
-
-    task.delay(20, function()
+    task.delay(duration, function()
         if notifGui and notifGui.Parent then dismiss() end
     end)
 end
 
-task.spawn(showDiscordNotification)
+task.spawn(function()
+    showNotification("Warning", "Your game may lag", 5, true)
+end)
 
 -- ============================================================
 --  CONFIG
@@ -476,7 +481,11 @@ clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 4
 clBody.BackgroundTransparency = 1
 clBody.Text =
     "Updated The Golden UI\n" ..
-    "-Added Discord button + \"game may lag\" warning\n" ..
+    "-Added \"game may lag\" warning notification\n" ..
+    "-Added \"Script successfully loaded\" notification\n" ..
+    "-Removed Discord button from notification\n" ..
+    "-Notifications now last 5 seconds\n" ..
+    "-Added Servers tab (empty for now)\n" ..
     "-Added View Changelog button (bottom of Customization)\n" ..
     "-Added resizable menu with proportional buttons\n" ..
     "-Whitelisted players highlighted in green with white outline\n" ..
@@ -1137,7 +1146,6 @@ local function isTargetDirectlyAboveOrBelow()
     if not myRoot then return false end
     local myPos = myRoot.Position
     for _, player in ipairs(Players:GetPlayers()) do
-        -- whitelist check restored
         if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
         local char = player.Character
         if not char or not char.Parent then continue end
@@ -1161,7 +1169,6 @@ local function getClosestPlayerToCursor()
     local cameraPos = Camera.CFrame.Position
     local cameraLook = Camera.CFrame.LookVector
     for _, player in ipairs(Players:GetPlayers()) do
-        -- whitelist check restored
         if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
         local character = player.Character
         if not character or not character.Parent then continue end
@@ -1764,7 +1771,7 @@ local function makeColorPicker(parent, name, getter, setter)
     return row
 end
 
-local tabNames = { "Customization", "Game", "Game Customization" }
+local tabNames = { "Customization", "Game", "Game Customization", "Servers" }
 local tabButtons, tabFrames = {}, {}
 
 local function switchTab(name)
@@ -1810,6 +1817,7 @@ end
 local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
+local serversTab = tabFrames["Servers"]
 
 -- ============================================================
 --  TAB: CUSTOMIZATION
@@ -2308,7 +2316,13 @@ end)
 
 refreshWhitelistUI()
 
--- F1 — TOGGLE
+-- ============================================================
+--  TAB: SERVERS (empty for now)
+-- ============================================================
+
+-- ============================================================
+--  F1 — TOGGLE
+-- ============================================================
 local menuOpen = true
 local function setMenuOpen(state) menuOpen = state; main.Visible = state end
 
@@ -2323,3 +2337,5 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 print("[Vagrant Survival Best Script by Dokoo2] Loaded. F1 to toggle menu.")
+
+showNotification("Vagrant Survival", "Script successfully loaded", 5, false)
