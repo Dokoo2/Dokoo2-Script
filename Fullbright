@@ -1,4 +1,4 @@
--- Light Control Menu (English UI, Toggle with Right Ctrl)
+-- Light Control Menu (English UI, Toggle with Right Ctrl, Draggable)
 if getgenv().LightMenuExecuted then return end
 getgenv().LightMenuExecuted = true
 
@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -40,10 +41,10 @@ end
 
 -- ================= LOADING SCREEN =================
 local loadingFrame = Instance.new("Frame")
-loadingFrame.Size = UDim2.new(0, 300, 0, 30)
-loadingFrame.Position = UDim2.new(0.5, -150, 0.5, -15)
+loadingFrame.Size = UDim2.new(0, 400, 0, 70)
+loadingFrame.Position = UDim2.new(0.5, -200, 0.5, -35)
 loadingFrame.BackgroundColor3 = COLORS.Background
-loadingFrame.BackgroundTransparency = 0.1
+loadingFrame.BackgroundTransparency = 0
 loadingFrame.BorderSizePixel = 0
 loadingFrame.Parent = screenGui
 addStroke(loadingFrame, COLORS.Outline, 2)
@@ -52,9 +53,19 @@ local loadingCorner = Instance.new("UICorner")
 loadingCorner.CornerRadius = UDim.new(0, 6)
 loadingCorner.Parent = loadingFrame
 
+local loadingText = Instance.new("TextLabel")
+loadingText.Size = UDim2.new(1, 0, 0, 20)
+loadingText.Position = UDim2.new(0, 0, 0, 8)
+loadingText.BackgroundTransparency = 1
+loadingText.Text = "Loading"
+loadingText.TextColor3 = COLORS.Text
+loadingText.Font = Enum.Font.GothamBold
+loadingText.TextSize = 14
+loadingText.Parent = loadingFrame
+
 local loadingBarBg = Instance.new("Frame")
 loadingBarBg.Size = UDim2.new(0.9, 0, 0, 10)
-loadingBarBg.Position = UDim2.new(0.05, 0, 0.5, -5)
+loadingBarBg.Position = UDim2.new(0.05, 0, 0, 40)
 loadingBarBg.BackgroundColor3 = COLORS.Button
 loadingBarBg.BorderSizePixel = 0
 loadingBarBg.Parent = loadingFrame
@@ -74,12 +85,22 @@ local loadingBarFillCorner = Instance.new("UICorner")
 loadingBarFillCorner.CornerRadius = UDim.new(0, 5)
 loadingBarFillCorner.Parent = loadingBar
 
+local percentText = Instance.new("TextLabel")
+percentText.Size = UDim2.new(1, 0, 0, 20)
+percentText.Position = UDim2.new(0, 0, 0, 52)
+percentText.BackgroundTransparency = 1
+percentText.Text = "0%"
+percentText.TextColor3 = COLORS.Accent
+percentText.Font = Enum.Font.GothamBold
+percentText.TextSize = 12
+percentText.Parent = loadingFrame
+
 -- ================= MAIN MENU =================
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 400, 0, 400)
-mainFrame.Position = UDim2.new(0.5, -200, 0.5, -200)
+mainFrame.Size = UDim2.new(0, 420, 0, 400) 
+mainFrame.Position = UDim2.new(0.5, -210, 0.5, -200)
 mainFrame.BackgroundColor3 = COLORS.Background
-mainFrame.BackgroundTransparency = 0.05
+mainFrame.BackgroundTransparency = 0
 mainFrame.BorderSizePixel = 0
 mainFrame.Visible = false
 mainFrame.Parent = screenGui
@@ -89,7 +110,34 @@ local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 8)
 mainCorner.Parent = mainFrame
 
--- Функция для создания ползунков
+-- ================= DRAG LOGIC =================
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+-- Перетаскивание за фон меню
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- ================= CONTROL CREATION =================
 local function createControl(name, min, max, default, positionY, callback)
     local container = Instance.new("Frame")
     container.Size = UDim2.new(0.9, 0, 0, 50)
@@ -152,7 +200,7 @@ local function createControl(name, min, max, default, positionY, callback)
     skCorner.CornerRadius = UDim.new(0, 4)
     skCorner.Parent = sliderKnob
 
-    local dragging = false
+    local isDraggingSlider = false
     local function updateSlider(value)
         value = math.clamp(value, min, max)
         local alpha = (value - min) / (max - min)
@@ -164,20 +212,20 @@ local function createControl(name, min, max, default, positionY, callback)
 
     sliderKnob.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
+            isDraggingSlider = true
         end
     end)
     
     sliderBg.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
+            isDraggingSlider = true
             local val = min + ((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X) * (max - min)
             updateSlider(val)
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        if isDraggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local val = min + ((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X) * (max - min)
             updateSlider(val)
         end
@@ -185,7 +233,7 @@ local function createControl(name, min, max, default, positionY, callback)
 
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
+            isDraggingSlider = false
         end
     end)
 
@@ -228,12 +276,9 @@ end)
 
 -- ================= TOGGLE LOGIC (Right Ctrl) =================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    -- Если ввод был обработан игрой (например, открыт чат), игнорируем
     if gameProcessed then return end
     
-    -- Проверяем, что нажата именно Right Ctrl (RightControl)
     if input.KeyCode == Enum.KeyCode.RightControl then
-        -- Если меню уже загрузилось (загрузка скрыта), переключаем видимость
         if not loadingFrame.Visible then
             mainFrame.Visible = not mainFrame.Visible
         end
@@ -244,10 +289,21 @@ end)
 local tween = TweenService:Create(loadingBar, TweenInfo.new(2, Enum.EasingStyle.Linear), {Size = UDim2.new(1, 0, 1, 0)})
 tween:Play()
 
+local startTime = tick()
+local loadingConnection
+loadingConnection = RunService.Heartbeat:Connect(function()
+    if not loadingFrame.Visible then
+        if loadingConnection then loadingConnection:Disconnect() end
+        return
+    end
+    local elapsed = tick() - startTime
+    local percent = math.clamp(math.floor((elapsed / 2) * 100), 0, 100)
+    percentText.Text = tostring(percent) .. "%"
+end)
+
 task.delay(2, function()
     loadingFrame.Visible = false
-    mainFrame.Visible = true -- Показываем меню сразу после загрузки
-    getgenv().LightMenuLoaded = true
+    mainFrame.Visible = true
     
     pcall(function()
         Lighting.Brightness = 0.8
