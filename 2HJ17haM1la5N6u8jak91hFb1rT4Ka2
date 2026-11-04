@@ -1,0 +1,760 @@
+--// AIMBOT MENU v25 (NPC Scan 1min, NPC Update 1s)
+--// Place in StarterPlayer > StarterPlayerScripts (LocalScript)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ================== SETTINGS ==================
+local AIMBOT_RADIUS = 1000
+local AIM_TARGET_RADIUS = 25
+local SMOOTHNESS = 0.05
+local IGNORE_TEAMMATES = true
+
+local targetWalkSpeed = 16
+local speedLocked = false
+
+local aimbotEnabled = false
+local espEnabled = true
+local menuVisible = true
+
+local lastPosition = nil
+
+-- Таймеры
+local NPC_SCAN_INTERVAL = 60 -- 1 минута
+local NPC_UPDATE_INTERVAL = 1 -- 1 секунда
+local npcScanTimer = 0
+local npcUpdateTimer = 0
+
+local npcList = {} -- Список найденных NPC
+local cachedHeads = {} -- Кэш голов для аимбота
+
+-- ================== COLORS ==================
+local C_BG        = Color3.fromRGB(24, 24, 24)
+local C_BUTTON    = Color3.fromRGB(40, 40, 40)
+local C_OUTLINE   = Color3.fromRGB(68, 68, 68)
+local C_ACCENT    = Color3.fromRGB(230, 180, 40)
+local C_TEXT      = Color3.fromRGB(238, 238, 238)
+
+local ENEMY_COLOR = Color3.fromRGB(0, 120, 255)
+local ALLY_COLOR  = Color3.fromRGB(255, 40, 40)
+local NPC_COLOR   = Color3.fromRGB(50, 220, 50)
+
+-- ================== GUI ==================
+local gui = Instance.new("ScreenGui")
+gui.Name = "AimbotMenu"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 999
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 320, 0, 500)
+frame.Position = UDim2.new(0, 50, 0, 50)
+frame.BackgroundColor3 = C_BG
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 4)
+corner.Parent = frame
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = C_OUTLINE
+stroke.Thickness = 1
+stroke.Parent = frame
+
+-- ===== HEADER =====
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 36)
+header.BackgroundColor3 = C_BG
+header.BorderSizePixel = 0
+header.Parent = frame
+
+local headerAccent = Instance.new("Frame")
+headerAccent.Size = UDim2.new(0, 4, 0, 18)
+headerAccent.Position = UDim2.new(0, 12, 0.5, -9)
+headerAccent.BackgroundColor3 = C_ACCENT
+headerAccent.BorderSizePixel = 0
+headerAccent.Parent = header
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -80, 1, 0)
+title.Position = UDim2.new(0, 24, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "AIMBOT & TP"
+title.TextColor3 = C_TEXT
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+local hint = Instance.new("TextLabel")
+hint.Size = UDim2.new(0, 50, 1, 0)
+hint.Position = UDim2.new(1, -60, 0, 0)
+hint.BackgroundTransparency = 1
+hint.Text = "[F1]"
+hint.TextColor3 = C_TEXT
+hint.TextTransparency = 0.4
+hint.Font = Enum.Font.GothamBold
+hint.TextSize = 12
+hint.TextXAlignment = Enum.TextXAlignment.Right
+hint.Parent = header
+
+-- ===== DRAG =====
+local dragging, dragStart, startPos = false, nil, nil
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = frame.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+end)
+
+-- ================== HELPERS ==================
+local function makeRow(y, h)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -20, 0, h)
+    row.Position = UDim2.new(0, 10, 0, y)
+    row.BackgroundColor3 = C_BUTTON
+    row.BorderSizePixel = 0
+    row.Parent = frame
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 4); c.Parent = row
+    return row
+end
+
+local function makeLabel(parent, text)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0, 160, 1, 0)
+    lbl.Position = UDim2.new(0, 12, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = C_TEXT
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = parent
+    return lbl
+end
+
+local toggleButtons = {}
+
+local function makeToggle(name, y, defaultValue, callback)
+    local row = makeRow(y, 34)
+    makeLabel(row, name)
+    
+    local preview = Instance.new("Frame")
+    preview.Size = UDim2.new(0, 20, 0, 20)
+    preview.Position = UDim2.new(1, -92, 0.5, -10)
+    preview.BackgroundColor3 = defaultValue and C_ACCENT or C_BUTTON
+    preview.BorderSizePixel = 1
+    preview.BorderColor3 = C_OUTLINE
+    preview.Parent = row
+    local pvC = Instance.new("UICorner"); pvC.CornerRadius = UDim.new(0, 4); pvC.Parent = preview
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 60, 0, 22)
+    btn.Position = UDim2.new(1, -60, 0.5, -11)
+    btn.BackgroundColor3 = C_BUTTON
+    btn.Text = defaultValue and "ON" or "OFF"
+    btn.TextColor3 = defaultValue and C_ACCENT or C_TEXT
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.AutoButtonColor = false
+    btn.Parent = row
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
+    local bs = Instance.new("UIStroke"); bs.Color = C_OUTLINE; bs.Parent = btn
+
+    local state = defaultValue
+    local function updateVisual()
+        preview.BackgroundColor3 = state and C_ACCENT or C_BUTTON
+        btn.Text = state and "ON" or "OFF"
+        btn.TextColor3 = state and C_ACCENT or C_TEXT
+    end
+    
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        updateVisual()
+        callback(state)
+    end)
+    
+    if name == "Aimbot" then toggleButtons["Aimbot"] = btn end
+    updateVisual()
+end
+
+local function makeActionButton(name, y, callback)
+    local row = makeRow(y, 34)
+    makeLabel(row, name)
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 60, 0, 22)
+    btn.Position = UDim2.new(1, -60, 0.5, -11)
+    btn.BackgroundColor3 = C_BUTTON
+    btn.Text = "Activate"
+    btn.TextColor3 = C_TEXT
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.AutoButtonColor = false
+    btn.Parent = row
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
+    local bs = Instance.new("UIStroke"); bs.Color = C_OUTLINE; bs.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        callback()
+        local oldText = btn.Text
+        btn.Text = "Done!"
+        btn.TextColor3 = C_ACCENT
+        task.wait(0.5)
+        btn.Text = oldText
+        btn.TextColor3 = C_TEXT
+    end)
+    return btn
+end
+
+local function makeSlider(name, y, min, max, default, step, callback)
+    local row = makeRow(y, 34)
+    makeLabel(row, name)
+    
+    local valLabel = Instance.new("TextLabel")
+    valLabel.Size = UDim2.new(0, 40, 1, 0)
+    valLabel.Position = UDim2.new(1, -110, 0, 0)
+    valLabel.BackgroundTransparency = 1
+    valLabel.Text = string.format("%.2f", default)
+    valLabel.TextColor3 = C_ACCENT
+    valLabel.Font = Enum.Font.GothamBold
+    valLabel.TextSize = 12
+    valLabel.TextXAlignment = Enum.TextXAlignment.Center
+    valLabel.Parent = row
+    
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 60, 0, 6)
+    bar.Position = UDim2.new(1, -60, 0.5, -3)
+    bar.BackgroundColor3 = C_OUTLINE
+    bar.BorderSizePixel = 0
+    bar.Parent = row
+    local bC = Instance.new("UICorner"); bC.CornerRadius = UDim.new(1, 0); bC.Parent = bar
+    
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = C_ACCENT
+    fill.BorderSizePixel = 0
+    fill.Parent = bar
+    local fC = Instance.new("UICorner"); fC.CornerRadius = UDim.new(1, 0); fC.Parent = fill
+    
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 10, 0, 10)
+    knob.Position = UDim2.new(1, -5, 0.5, -5)
+    knob.BackgroundColor3 = C_TEXT
+    knob.BorderSizePixel = 0
+    knob.Parent = fill
+    local kC = Instance.new("UICorner"); kC.CornerRadius = UDim.new(1, 0); kC.Parent = knob
+    
+    local draggingSlider = false
+    local function updateFromX(absX)
+        local barAbs = bar.AbsolutePosition.X
+        local barW = bar.AbsoluteSize.X
+        local rel = math.clamp((absX - barAbs) / barW, 0, 1)
+        local val = min + rel * (max - min)
+        if step and step > 0 then val = math.floor(val / step + 0.5) * step end
+        local alpha = (val - min) / (max - min)
+        fill.Size = UDim2.new(alpha, 0, 1, 0)
+        valLabel.Text = string.format("%.2f", val)
+        callback(val)
+    end
+    
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingSlider = true; updateFromX(input.Position.X)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateFromX(input.Position.X)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then draggingSlider = false end
+    end)
+end
+
+-- ================== TP LOGIC ==================
+function giveTeleportTool()
+    local char = LocalPlayer.Character
+    if not char then return end
+    if LocalPlayer.Backpack:FindFirstChild("TeleportTool") or char:FindFirstChild("TeleportTool") then return end
+    
+    local tool = Instance.new("Tool")
+    tool.Name = "TeleportTool"
+    tool.RequiresHandle = false
+    tool.CanBeDropped = false
+    tool.ToolTip = "Click to teleport"
+    
+    tool.Activated:Connect(function()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            lastPosition = hrp.CFrame
+        end
+        
+        local mouse = LocalPlayer:GetMouse()
+        local target = mouse.Hit
+        if target and hrp then
+            hrp.CFrame = CFrame.new(target.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+    tool.Parent = LocalPlayer.Backpack
+end
+
+function tpToPlayer(player)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local targetChar = player.Character
+    local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    
+    if hrp and targetHrp then
+        lastPosition = hrp.CFrame
+        hrp.CFrame = CFrame.new(targetHrp.Position + Vector3.new(3, 0, 3))
+    end
+end
+
+function tpBack()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp and lastPosition then
+        hrp.CFrame = lastPosition
+        lastPosition = nil
+    end
+end
+
+-- ================== WALKSPEED INPUT ==================
+function openWalkSpeedInput()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    
+    local inputGui = Instance.new("ScreenGui")
+    inputGui.Name = "WSInput"
+    inputGui.ResetOnSpawn = false
+    inputGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(0, 200, 0, 100)
+    bg.Position = UDim2.new(0.5, -100, 0.5, -50)
+    bg.BackgroundColor3 = C_BG
+    bg.BorderSizePixel = 1
+    bg.BorderColor3 = C_ACCENT
+    bg.Parent = inputGui
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 25)
+    lbl.Text = "Enter WalkSpeed (16-500)"
+    lbl.TextColor3 = C_TEXT
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 12
+    lbl.Parent = bg
+    
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, -20, 0, 30)
+    box.Position = UDim2.new(0, 10, 0, 30)
+    box.BackgroundColor3 = C_BUTTON
+    box.Text = tostring(targetWalkSpeed)
+    box.TextColor3 = C_TEXT
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 14
+    box.Parent = bg
+    
+    local setBtn = Instance.new("TextButton")
+    setBtn.Size = UDim2.new(1, -20, 0, 25)
+    setBtn.Position = UDim2.new(0, 10, 0, 65)
+    setBtn.BackgroundColor3 = C_ACCENT
+    setBtn.Text = "Apply"
+    setBtn.TextColor3 = Color3.fromRGB(0,0,0)
+    setBtn.Font = Enum.Font.GothamBold
+    setBtn.TextSize = 12
+    setBtn.Parent = bg
+    
+    setBtn.MouseButton1Click:Connect(function()
+        local num = tonumber(box.Text)
+        if num then
+            targetWalkSpeed = math.clamp(num, 16, 500)
+            hum.WalkSpeed = targetWalkSpeed
+        end
+        inputGui:Destroy()
+    end)
+end
+
+-- ================== BUILD MENU ==================
+local Y = 45
+
+makeToggle("Aimbot", Y, aimbotEnabled, function(v) setAimbotState(v) end); Y = Y + 40
+makeActionButton("Get TP Tool", Y, function() giveTeleportTool() end); Y = Y + 40
+makeActionButton("TP Back", Y, function() tpBack() end); Y = Y + 40
+makeActionButton("Set WalkSpeed", Y, function() openWalkSpeedInput() end); Y = Y + 40
+makeToggle("Force Speed (5ms)", Y, speedLocked, function(v) speedLocked = v end); Y = Y + 40
+makeToggle("Ignore Teammates", Y, IGNORE_TEAMMATES, function(v) IGNORE_TEAMMATES = v end); Y = Y + 40
+makeToggle("ESP", Y, espEnabled, function(v) 
+    espEnabled = v
+    if espEnabled then refreshAllESP() else clearAllESP() end
+end); Y = Y + 40
+
+makeSlider("Smoothing", Y, 0, 1, SMOOTHNESS, 0.01, function(v) SMOOTHNESS = v end); Y = Y + 40
+makeSlider("Circle Radius", Y, 10, 200, AIM_TARGET_RADIUS, 5, function(v) AIM_TARGET_RADIUS = v end); Y = Y + 40
+
+-- ================== PLAYER TP LIST ==================
+local listFrame = Instance.new("Frame")
+listFrame.Size = UDim2.new(1, -20, 0, 120)
+listFrame.Position = UDim2.new(0, 10, 0, Y + 5)
+listFrame.BackgroundColor3 = C_BG
+listFrame.BorderSizePixel = 1
+listFrame.BorderColor3 = C_OUTLINE
+listFrame.Parent = frame
+
+local listLbl = Instance.new("TextLabel")
+listLbl.Size = UDim2.new(1, 0, 0, 20)
+listLbl.BackgroundColor3 = C_BUTTON
+listLbl.Text = "Teleport to Player"
+listLbl.TextColor3 = C_TEXT
+listLbl.Font = Enum.Font.GothamBold
+listLbl.TextSize = 11
+listLbl.Parent = listFrame
+
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -4, 1, -24)
+scroll.Position = UDim2.new(0, 2, 0, 22)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 4
+scroll.Parent = listFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 2)
+listLayout.Parent = scroll
+
+local function refreshPlayerList()
+    for _, child in ipairs(scroll:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 and not isTeammate(player) then
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -4, 0, 22)
+                btn.BackgroundColor3 = C_BUTTON
+                btn.Text = player.Name
+                btn.TextColor3 = C_TEXT
+                btn.Font = Enum.Font.Gotham
+                btn.TextSize = 11
+                btn.Parent = scroll
+                
+                local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 2); c.Parent = btn
+                
+                btn.MouseButton1Click:Connect(function()
+                    tpToPlayer(player)
+                end)
+            end
+        end
+    end
+end
+
+-- ================== INDICATOR & STATE ==================
+local indicator = Instance.new("Frame")
+indicator.Name = "AimbotIndicator"
+indicator.Size = UDim2.new(0, 20, 0, 20)
+indicator.Position = UDim2.new(1, -34, 1, -34)
+indicator.BackgroundColor3 = C_ACCENT
+indicator.BorderSizePixel = 1
+indicator.BorderColor3 = C_OUTLINE
+indicator.Visible = false
+indicator.Parent = gui
+local indCorner = Instance.new("UICorner"); indCorner.CornerRadius = UDim.new(0, 4); indCorner.Parent = indicator
+
+function setAimbotState(on)
+    aimbotEnabled = on
+    indicator.Visible = on
+end
+
+-- ================== HOTKEYS ==================
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.X then
+        if toggleButtons["Aimbot"] then 
+            toggleButtons["Aimbot"]:Activate() 
+        end
+    elseif input.KeyCode == Enum.KeyCode.T then
+        giveTeleportTool()
+    elseif input.KeyCode == Enum.KeyCode.B then
+        tpBack()
+    elseif input.KeyCode == Enum.KeyCode.V then
+        openWalkSpeedInput()
+    elseif input.KeyCode == Enum.KeyCode.F1 then
+        menuVisible = not menuVisible
+        frame.Visible = menuVisible
+    end
+end)
+
+-- ================== LOGIC (Aimbot & ESP) ==================
+function isTeammate(player)
+    if not IGNORE_TEAMMATES then return false end
+    if LocalPlayer.Team == nil or player.Team == nil then return false end
+    return player.Team == LocalPlayer.Team
+end
+
+-- ================== ESP ==================
+local espHighlights = {}
+
+local function getColorFor(obj)
+    if obj:IsA("Model") then
+        local player = Players:GetPlayerFromCharacter(obj)
+        if player then
+            if LocalPlayer.Team ~= nil and player.Team ~= nil and player.Team == LocalPlayer.Team then
+                return ALLY_COLOR
+            else
+                return ENEMY_COLOR
+            end
+        else
+            return NPC_COLOR
+        end
+    end
+    return NPC_COLOR
+end
+
+local function applyESP(obj)
+    if not espEnabled then return end
+    
+    local player = Players:GetPlayerFromCharacter(obj)
+    local isPlayer = player ~= nil
+    if isPlayer and obj == LocalPlayer.Character then return end
+    
+    local isTarget = false
+    if obj:IsA("Model") then
+        local hum = obj:FindFirstChildOfClass("Humanoid")
+        local head = obj:FindFirstChild("Head")
+        if (hum and hum.Health > 0) or (head and head:IsA("BasePart") and not hum) then
+            isTarget = true
+        end
+    end
+
+    if not isTarget then
+        if espHighlights[obj] then
+            espHighlights[obj]:Destroy()
+            espHighlights[obj] = nil
+        end
+        return
+    end
+
+    local h = espHighlights[obj]
+    if not h then
+        h = Instance.new("Highlight")
+        h.Name = "AimbotESP"
+        h.FillTransparency = 0.65
+        h.OutlineTransparency = 0.2
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = obj
+        espHighlights[obj] = h
+    end
+    if h.Parent ~= obj then h.Parent = obj end
+
+    h.FillColor = getColorFor(obj)
+    h.OutlineColor = getColorFor(obj)
+end
+
+function clearAllESP()
+    for obj, h in pairs(espHighlights) do 
+        if h and h.Parent then h:Destroy() end 
+    end
+    espHighlights = {}
+end
+
+-- ================== КЕШИРОВАНИЕ ГОЛОВ (Только живые) ==================
+local function updateHeadsCache()
+    local newHeads = {}
+    
+    -- 1. Игроки
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local head = p.Character:FindFirstChild("Head")
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if head and hum and hum.Health > 0 then
+                table.insert(newHeads, { part = head, model = p.Character, isPlayer = true })
+            end
+        end
+    end
+
+    -- 2. NPC (из списка найденных)
+    for _, npc in ipairs(npcList) do
+        if npc and npc.Parent then
+            local head = npc:FindFirstChild("Head")
+            local hum = npc:FindFirstChildOfClass("Humanoid")
+            if head and (not hum or hum.Health > 0) then
+                table.insert(newHeads, { part = head, model = npc, isPlayer = false })
+            end
+        end
+    end
+
+    cachedHeads = newHeads
+end
+
+-- ================== ОБНОВЛЕНИЕ ДАННЫХ ==================
+-- 1. ESP каждые 50мс
+local espAcc = 0
+RunService.Heartbeat:Connect(function(dt)
+    if not espEnabled then return end
+    espAcc = espAcc + dt
+    if espAcc >= 0.05 then
+        espAcc = 0
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                applyESP(p.Character)
+            end
+        end
+        for _, npc in ipairs(npcList) do
+            if npc and npc.Parent then
+                applyESP(npc)
+            end
+        end
+    end
+end)
+
+-- 2. Ежесекундное обновление NPC и кэша голов
+task.spawn(function()
+    while task.wait(1) do
+        -- Обновляем данные для найденных NPC (живы ли, применяем ESP)
+        if espEnabled then
+            for _, npc in ipairs(npcList) do
+                if npc and npc.Parent then
+                    applyESP(npc)
+                end
+            end
+        end
+        -- Пересобираем список голов (для аимбота)
+        updateHeadsCache()
+    end
+end)
+
+-- 3. Сканирование карты на новых NPC (раз в 60 секунд)
+task.spawn(function()
+    while task.wait(NPC_SCAN_INTERVAL) do
+        if espEnabled then
+            local newNpcList = {}
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("Model") then
+                    if not Players:GetPlayerFromCharacter(obj) then
+                        local hum = obj:FindFirstChildOfClass("Humanoid")
+                        local head = obj:FindFirstChild("Head")
+                        if (hum and hum.Health > 0) or (head and head:IsA("BasePart")) then
+                            table.insert(newNpcList, obj)
+                            applyESP(obj)
+                        end
+                    end
+                end
+            end
+            npcList = newNpcList
+        end
+    end
+end)
+
+-- Список игроков (телепорт)
+task.spawn(function()
+    while task.wait(1) do
+        refreshPlayerList()
+    end
+end)
+
+-- ================== AIMBOT ==================
+local function getTarget()
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    if not myRoot or (myHum and myHum.Health <= 0) then return nil end
+    
+    local bestTarget, bestDist = nil, math.huge
+    
+    for _, data in ipairs(cachedHeads) do
+        local head = data.part
+        local model = data.model
+        
+        local targetHum = model:FindFirstChildOfClass("Humanoid")
+        local isAlive = true
+        if targetHum then
+            isAlive = targetHum.Health > 0
+        end
+        
+        if head and head.Parent and isAlive then
+            local isTeammateObj = false
+            if data.isPlayer then
+                local plr = Players:GetPlayerFromCharacter(model)
+                if plr and isTeammate(plr) then
+                    isTeammateObj = true
+                end
+            end
+            
+            if not isTeammateObj then
+                local dist = (head.Position - myRoot.Position).Magnitude
+                if dist <= AIMBOT_RADIUS then
+                    local toTarget = head.Position - Camera.CFrame.Position
+                    local horiz = math.abs(toTarget:Dot(Camera.CFrame.RightVector))
+                    local vert = math.abs(toTarget:Dot(Camera.CFrame.UpVector))
+                    local depth = toTarget:Dot(Camera.CFrame.LookVector)
+                    
+                    if depth > 0 and (horiz*horiz + vert*vert) <= (AIM_TARGET_RADIUS * AIM_TARGET_RADIUS) then
+                        if dist < bestDist then 
+                            bestDist = dist
+                            bestTarget = head.Position 
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestTarget
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    if not aimbotEnabled then return end
+    local targetPos = getTarget()
+    if not targetPos then return end
+    local desired = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+    if SMOOTHNESS <= 0.001 then
+        Camera.CFrame = desired
+    else
+        Camera.CFrame = Camera.CFrame:Lerp(desired, math.clamp(dt / SMOOTHNESS, 0, 1))
+    end
+end)
+
+-- ================== 5MS WALKSPEED LOOP ==================
+local speedAcc = 0
+RunService.Heartbeat:Connect(function(dt)
+    if not speedLocked then return end
+    
+    speedAcc = speedAcc + dt
+    if speedAcc >= 0.005 then
+        speedAcc = 0
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.WalkSpeed ~= targetWalkSpeed then
+            hum.WalkSpeed = targetWalkSpeed
+        end
+    end
+end)
+
+-- Инициализация
+refreshAllESP()
+refreshPlayerList()
+updateHeadsCache()
