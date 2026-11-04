@@ -246,12 +246,6 @@ local Config = {
         TextColor = Color3.fromRGB(255, 230, 150),
         TextSize = 14,
         ShowName = true, ShowHP = true, ShowDistance = true,
-        NameColor = Color3.fromRGB(255, 200, 80),
-        HPColor = Color3.fromRGB(255, 170, 40),
-        DistanceColor = Color3.fromRGB(230, 190, 120),
-        ShowTracers = false,
-        TracerColor = Color3.fromRGB(255, 215, 0),
-        TracerThickness = 1,
         WhitelistHighlight = {
             Enabled = true,
             FillColor = Color3.fromRGB(0, 255, 0),
@@ -263,12 +257,17 @@ local Config = {
         MinDot = 0.1, MaxMovePerFrame = 60, AimPart = "Head",
         VerticalBlockEnabled = true, VerticalBlockRadius = 3, VerticalBlockMinHeight = 3,
         Whitelist = {},
+        NPCAimEnabled = false,
+        NPCMaxDistance = 500,
+        NPCCachedHeads = {},
+        NPCModelCache = {},
+        NPCHighlights = {},
+        NPCSpeed = 16,
     },
-    NoShadows = { Enabled = false },
     InfiniteJump = { Enabled = false },
+    ForceSpeed = { Enabled = false, Speed = 24 },
     Cursor = { Enabled = false, ImageId = "", Size = 32, HideDefault = true },
     Spectate = { AutoSwitchOnDeath = true },
-    Freecam = { Enabled = false, Speed = 1.0, Sensitivity = 0.0025 },
     Font = "Silkscreen",
 }
 
@@ -481,17 +480,19 @@ clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 4
 clBody.BackgroundTransparency = 1
 clBody.Text =
     "Updated The Golden UI\n" ..
-    "-Added \"game may lag\" warning notification\n" ..
-    "-Added \"Script successfully loaded\" notification\n" ..
-    "-Removed Discord button from notification\n" ..
-    "-Notifications now last 5 seconds\n" ..
-    "-Added Servers tab (empty for now)\n" ..
+    "-Removed tracers\n" ..
+    "-Removed freecam\n" ..
+    "-Removed color customization\n" ..
+    "-Removed Servers tab\n" ..
+    "-Removed No Shadows\n" ..
+    "-Added Movement tab\n" ..
+    "-Force Speed rewritten (MoveDirection + BodyVelocity, WalkSpeed-like)\n" ..
+    "-Added NPC Aim (separate from Player Aim)\n" ..
+    "-NPC cache auto-refreshes every 10 minutes, NPCs highlighted red\n" ..
     "-Added View Changelog button (bottom of Customization)\n" ..
     "-Added resizable menu with proportional buttons\n" ..
     "-Whitelisted players highlighted in green with white outline\n" ..
-    "-Tracers hidden for whitelisted players\n" ..
-    "-Whitelist excludes players from aim (restored)\n" ..
-    "-Removed meme face feature"
+    "-Whitelist excludes players from aim"
 clBody.TextColor3 = Theme.Text
 clBody.TextSize = 12
 clBody.TextWrapped = true
@@ -515,482 +516,13 @@ UserInputService.InputBegan:Connect(function(input, gp)
 end)
 
 -- ============================================================
---  COLOR PICKER POPUP
--- ============================================================
-local cpGui = Instance.new("ScreenGui")
-cpGui.Name = "VagrantColorPicker"
-cpGui.ResetOnSpawn = false
-cpGui.IgnoreGuiInset = true
-cpGui.DisplayOrder = 100
-cpGui.Enabled = false
-cpGui.Parent = guiParent
-
-local cpBackdrop = Instance.new("TextButton")
-cpBackdrop.Size = UDim2.new(1, 0, 1, 0)
-cpBackdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-cpBackdrop.BackgroundTransparency = 0.4
-cpBackdrop.BorderSizePixel = 0
-cpBackdrop.Text = ""
-cpBackdrop.AutoButtonColor = false
-cpBackdrop.Parent = cpGui
-
-local cpCard = Instance.new("Frame")
-cpCard.Size = UDim2.new(0, 320, 0, 500)
-cpCard.Position = UDim2.new(0.5, -160, 0.5, -250)
-cpCard.BorderSizePixel = 0
-cpCard.Active = true
-cpCard.Parent = cpGui
-addPanel(cpCard)
-local cpCorner = Instance.new("UICorner"); cpCorner.CornerRadius = UDim.new(0, 10); cpCorner.Parent = cpCard
-local cpStroke = Instance.new("UIStroke"); cpStroke.Thickness = 1.5; cpStroke.Parent = cpCard
-addStroke(cpStroke)
-
-local cpTitleBar = Instance.new("Frame")
-cpTitleBar.Size = UDim2.new(1, 0, 0, 34)
-cpTitleBar.BorderSizePixel = 0
-cpTitleBar.Parent = cpCard
-addBg(cpTitleBar)
-local cpTBc = Instance.new("UICorner"); cpTBc.CornerRadius = UDim.new(0, 10); cpTBc.Parent = cpTitleBar
-
-local cpTitle = Instance.new("TextLabel")
-cpTitle.Size = UDim2.new(1, -30, 1, 0); cpTitle.Position = UDim2.new(0, 12, 0, 0)
-cpTitle.BackgroundTransparency = 1; cpTitle.Text = "Color Picker"
-cpTitle.TextSize = 13
-cpTitle.TextXAlignment = Enum.TextXAlignment.Left
-cpTitle.Parent = cpTitleBar
-addText(cpTitle); addFont(cpTitle)
-
-local cpCloseBtn = Instance.new("TextButton")
-cpCloseBtn.Size = UDim2.new(0, 22, 0, 22); cpCloseBtn.Position = UDim2.new(1, -26, 0, 6)
-cpCloseBtn.BorderSizePixel = 0
-cpCloseBtn.Text = "X"; cpCloseBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
-cpCloseBtn.TextSize = 12; cpCloseBtn.AutoButtonColor = true
-cpCloseBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
-cpCloseBtn.Parent = cpTitleBar
-addFont(cpCloseBtn)
-local cpCloseC = Instance.new("UICorner"); cpCloseC.CornerRadius = UDim.new(0, 4); cpCloseC.Parent = cpCloseBtn
-
-local wheelSize = 170
-local wheelContainer = Instance.new("Frame")
-wheelContainer.Size = UDim2.new(0, wheelSize, 0, wheelSize)
-wheelContainer.Position = UDim2.new(0.5, -wheelSize/2, 0, 44)
-wheelContainer.BackgroundTransparency = 1
-wheelContainer.Parent = cpCard
-
-local wheelImage = Instance.new("ImageLabel")
-wheelImage.Size = UDim2.new(1, 0, 1, 0)
-wheelImage.BackgroundColor3 = Color3.fromRGB(45, 35, 15)
-wheelImage.BorderSizePixel = 0
-wheelImage.Image = "rbxassetid://4745310317"
-wheelImage.Parent = wheelContainer
-local wic = Instance.new("UICorner"); wic.CornerRadius = UDim.new(1, 0); wic.Parent = wheelImage
-
-local wheelButton = Instance.new("TextButton")
-wheelButton.Size = UDim2.new(1, 0, 1, 0)
-wheelButton.BackgroundTransparency = 1
-wheelButton.Text = ""
-wheelButton.AutoButtonColor = false
-wheelButton.Parent = wheelContainer
-
-local wheelCursor = Instance.new("Frame")
-wheelCursor.Size = UDim2.new(0, 14, 0, 14)
-wheelCursor.AnchorPoint = Vector2.new(0.5, 0.5)
-wheelCursor.BorderSizePixel = 0
-wheelCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-wheelCursor.ZIndex = 5
-wheelCursor.Parent = wheelContainer
-local wcc = Instance.new("UICorner"); wcc.CornerRadius = UDim.new(1, 0); wcc.Parent = wheelCursor
-local wcs = Instance.new("UIStroke"); wcs.Color = Color3.fromRGB(0, 0, 0); wcs.Thickness = 1.5; wcs.Parent = wheelCursor
-
-local valueRow = Instance.new("Frame")
-valueRow.Size = UDim2.new(1, -24, 0, 24)
-valueRow.Position = UDim2.new(0, 12, 0, wheelSize + 52)
-valueRow.BackgroundTransparency = 1
-valueRow.Parent = cpCard
-
-local valueLbl = Instance.new("TextLabel")
-valueLbl.Size = UDim2.new(0, 50, 1, 0)
-valueLbl.BackgroundTransparency = 1; valueLbl.Text = "Value"
-valueLbl.TextSize = 11
-valueLbl.TextXAlignment = Enum.TextXAlignment.Left
-valueLbl.Parent = valueRow
-addText(valueLbl); addFont(valueLbl)
-
-local valueBar = Instance.new("TextButton")
-valueBar.Size = UDim2.new(1, -110, 0, 8)
-valueBar.Position = UDim2.new(0, 50, 0, 8)
-valueBar.BorderSizePixel = 0
-valueBar.Text = ""; valueBar.AutoButtonColor = false
-valueBar.Parent = valueRow
-addBtn(valueBar)
-local vbc = Instance.new("UICorner"); vbc.CornerRadius = UDim.new(1, 0); vbc.Parent = valueBar
-
-local valueFill = Instance.new("Frame")
-valueFill.Size = UDim2.new(1, 0, 1, 0)
-valueFill.BorderSizePixel = 0; valueFill.Parent = valueBar
-addAccent(valueFill)
-local vfc = Instance.new("UICorner"); vfc.CornerRadius = UDim.new(1, 0); vfc.Parent = valueFill
-
-local valueVal = Instance.new("TextLabel")
-valueVal.Size = UDim2.new(0, 50, 1, 0); valueVal.Position = UDim2.new(1, -50, 0, 0)
-valueVal.BackgroundTransparency = 1; valueVal.Text = "100"
-valueVal.TextSize = 11
-valueVal.TextXAlignment = Enum.TextXAlignment.Right
-valueVal.Parent = valueRow
-addText(valueVal); addFont(valueVal)
-
-local rgbFrame = Instance.new("Frame")
-rgbFrame.Size = UDim2.new(1, -24, 0, 80)
-rgbFrame.Position = UDim2.new(0, 12, 0, wheelSize + 82)
-rgbFrame.BackgroundTransparency = 1
-rgbFrame.Parent = cpCard
-
-local rgbSliders = {}
-
-local function makeRGBSlider(parent, channel, y)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 24); row.Position = UDim2.new(0, 0, 0, y)
-    row.BackgroundTransparency = 1; row.Parent = parent
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(0, 20, 1, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = channel
-    lbl.TextSize = 11; lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = row
-    addText(lbl); addFont(lbl)
-
-    local bar = Instance.new("TextButton")
-    bar.Size = UDim2.new(1, -80, 0, 8); bar.Position = UDim2.new(0, 20, 0, 8)
-    bar.BorderSizePixel = 0; bar.Text = ""; bar.AutoButtonColor = false
-    bar.Parent = row
-    addBtn(bar)
-    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(1, 0); bc.Parent = bar
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(1, 0, 1, 0); fill.BorderSizePixel = 0; fill.Parent = bar
-    addAccent(fill)
-    local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fill
-
-    local val = Instance.new("TextLabel")
-    val.Size = UDim2.new(0, 50, 1, 0); val.Position = UDim2.new(1, -50, 0, 0)
-    val.BackgroundTransparency = 1; val.Text = "0"
-    val.TextSize = 11; val.TextXAlignment = Enum.TextXAlignment.Right
-    val.Parent = row
-    addText(val); addFont(val)
-
-    rgbSliders[channel] = {bar = bar, fill = fill, val = val}
-end
-
-makeRGBSlider(rgbFrame, "R", 0)
-makeRGBSlider(rgbFrame, "G", 28)
-makeRGBSlider(rgbFrame, "B", 56)
-
-local hexRow = Instance.new("Frame")
-hexRow.Size = UDim2.new(1, -24, 0, 30)
-hexRow.Position = UDim2.new(0, 12, 0, wheelSize + 170)
-hexRow.BackgroundTransparency = 1
-hexRow.Parent = cpCard
-
-local hexLbl = Instance.new("TextLabel")
-hexLbl.Size = UDim2.new(0, 36, 1, 0)
-hexLbl.BackgroundTransparency = 1; hexLbl.Text = "Hex"
-hexLbl.TextSize = 11; hexLbl.TextXAlignment = Enum.TextXAlignment.Left
-hexLbl.Parent = hexRow
-addText(hexLbl); addFont(hexLbl)
-
-local hexBox = Instance.new("TextBox")
-hexBox.Size = UDim2.new(1, -36, 1, 0); hexBox.Position = UDim2.new(0, 36, 0, 0)
-hexBox.BackgroundColor3 = Theme.Background; hexBox.BorderSizePixel = 0
-hexBox.Text = "#FFFFFF"; hexBox.TextColor3 = Theme.Text; hexBox.TextSize = 11
-hexBox.ClearTextOnFocus = false; hexBox.TextXAlignment = Enum.TextXAlignment.Left
-hexBox.Parent = hexRow
-addFont(hexBox)
-local hbc = Instance.new("UICorner"); hbc.CornerRadius = UDim.new(0, 4); hbc.Parent = hexBox
-local hbp = Instance.new("UIPadding"); hbp.PaddingLeft = UDim.new(0, 6); hbp.PaddingRight = UDim.new(0, 6); hbp.Parent = hexBox
-
-local previewRow = Instance.new("Frame")
-previewRow.Size = UDim2.new(1, -24, 0, 36)
-previewRow.Position = UDim2.new(0, 12, 0, wheelSize + 208)
-previewRow.BackgroundTransparency = 1
-previewRow.Parent = cpCard
-
-local cpPreview = Instance.new("Frame")
-cpPreview.Size = UDim2.new(1, 0, 1, 0); cpPreview.BorderSizePixel = 0; cpPreview.Parent = previewRow
-local cpc = Instance.new("UICorner"); cpc.CornerRadius = UDim.new(0, 6); cpc.Parent = cpPreview
-local cps = Instance.new("UIStroke"); cps.Thickness = 1; cps.Parent = cpPreview
-addStroke(cps)
-
-local cpPreviewText = Instance.new("TextLabel")
-cpPreviewText.Size = UDim2.new(1, 0, 1, 0); cpPreviewText.BackgroundTransparency = 1
-cpPreviewText.Text = "#FFFFFF"; cpPreviewText.TextSize = 13
-cpPreviewText.TextColor3 = Color3.fromRGB(255, 255, 255)
-cpPreviewText.TextStrokeTransparency = 0
-cpPreviewText.Font = Enum.Font.GothamBold
-cpPreviewText.Parent = cpPreview
-
-local btnRow = Instance.new("Frame")
-btnRow.Size = UDim2.new(1, -24, 0, 32); btnRow.Position = UDim2.new(0, 12, 0, wheelSize + 252)
-btnRow.BackgroundTransparency = 1; btnRow.Parent = cpCard
-local btnRowLayout = Instance.new("UIListLayout")
-btnRowLayout.FillDirection = Enum.FillDirection.Horizontal
-btnRowLayout.Padding = UDim.new(0, 8); btnRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-btnRowLayout.Parent = btnRow
-
-local cpCancelBtn = Instance.new("TextButton")
-cpCancelBtn.Size = UDim2.new(0.5, -4, 1, 0); cpCancelBtn.BorderSizePixel = 0
-cpCancelBtn.Text = "Cancel"; cpCancelBtn.TextSize = 12; cpCancelBtn.AutoButtonColor = true
-cpCancelBtn.Parent = btnRow
-addBtn(cpCancelBtn); addText(cpCancelBtn); addFont(cpCancelBtn)
-local ccc = Instance.new("UICorner"); ccc.CornerRadius = UDim.new(0, 6); ccc.Parent = cpCancelBtn
-
-local cpApplyBtn = Instance.new("TextButton")
-cpApplyBtn.Size = UDim2.new(0.5, -4, 1, 0); cpApplyBtn.BorderSizePixel = 0
-cpApplyBtn.Text = "Apply"; cpApplyBtn.TextSize = 12; cpApplyBtn.AutoButtonColor = true
-cpApplyBtn.Parent = btnRow
-addAccent(cpApplyBtn)
-cpApplyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-addFont(cpApplyBtn)
-local cac = Instance.new("UICorner"); cac.CornerRadius = UDim.new(0, 6); cac.Parent = cpApplyBtn
-
-local cps_state = {
-    hue = 0, sat = 1, val = 1,
-    currentColor = Color3.new(1, 1, 1),
-    originalColor = Color3.new(1, 1, 1),
-    onLiveChange = nil,
-}
-
-local function toHex(col)
-    return string.format("#%02X%02X%02X",
-        math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5))
-end
-
-local function fromHex(s)
-    s = s:gsub("#", "")
-    if #s ~= 6 then return nil end
-    local r, g, b = tonumber(s:sub(1, 2), 16), tonumber(s:sub(3, 4), 16), tonumber(s:sub(5, 6), 16)
-    if r and g and b then return Color3.fromRGB(r, g, b) end
-    return nil
-end
-
-local function updateCursorPos()
-    local radius = wheelSize / 2
-    local angle = cps_state.hue * 2 * math.pi
-    local dist = cps_state.sat * radius
-    local x = radius + math.cos(angle) * dist
-    local y = radius + math.sin(angle) * dist
-    wheelCursor.Position = UDim2.new(0, x, 0, y)
-    wheelCursor.BackgroundColor3 = cps_state.currentColor
-end
-
-local function refreshUI()
-    cps_state.currentColor = Color3.fromHSV(cps_state.hue, cps_state.sat, cps_state.val)
-    updateCursorPos()
-    valueFill.Size = UDim2.new(cps_state.val, 0, 1, 0)
-    valueVal.Text = tostring(math.floor(cps_state.val * 100 + 0.5))
-
-    local r, g, b = cps_state.currentColor.R, cps_state.currentColor.G, cps_state.currentColor.B
-    rgbSliders["R"].fill.Size = UDim2.new(r, 0, 1, 0)
-    rgbSliders["R"].val.Text = tostring(math.floor(r * 255 + 0.5))
-    rgbSliders["G"].fill.Size = UDim2.new(g, 0, 1, 0)
-    rgbSliders["G"].val.Text = tostring(math.floor(g * 255 + 0.5))
-    rgbSliders["B"].fill.Size = UDim2.new(b, 0, 1, 0)
-    rgbSliders["B"].val.Text = tostring(math.floor(b * 255 + 0.5))
-
-    cpPreview.BackgroundColor3 = cps_state.currentColor
-    local brightness = (r + g + b) / 3
-    cpPreviewText.TextColor3 = brightness > 0.5 and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-    cpPreviewText.Text = toHex(cps_state.currentColor)
-    if not hexBox:IsFocused() then hexBox.Text = toHex(cps_state.currentColor) end
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.currentColor) end
-end
-
-local draggingWheel = false
-local function updateFromWheelInput(mx, my)
-    local abs = wheelButton.AbsolutePosition
-    local size = wheelButton.AbsoluteSize
-    local cx, cy = abs.X + size.X / 2, abs.Y + size.Y / 2
-    local dx, dy = mx - cx, my - cy
-    local radius = size.X / 2
-    local dist = math.sqrt(dx * dx + dy * dy)
-    if dist > radius then dist = radius end
-    cps_state.sat = dist / radius
-    cps_state.hue = (math.atan2(dy, dx) / (2 * math.pi)) % 1
-    refreshUI()
-end
-
-wheelButton.MouseButton1Down:Connect(function()
-    draggingWheel = true
-    local mp = UserInputService:GetMouseLocation()
-    updateFromWheelInput(mp.X, mp.Y + 36)
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingWheel and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local mp = UserInputService:GetMouseLocation()
-        updateFromWheelInput(mp.X, mp.Y + 36)
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingWheel = false end
-end)
-
-local draggingValue = false
-valueBar.MouseButton1Down:Connect(function()
-    draggingValue = true
-    local mp = UserInputService:GetMouseLocation()
-    cps_state.val = math.clamp((mp.X - valueBar.AbsolutePosition.X) / valueBar.AbsoluteSize.X, 0, 1)
-    refreshUI()
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingValue and input.UserInputType == Enum.UserInputType.MouseMovement then
-        cps_state.val = math.clamp((input.Position.X - valueBar.AbsolutePosition.X) / valueBar.AbsoluteSize.X, 0, 1)
-        refreshUI()
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingValue = false end
-end)
-
-local draggingRGB = nil
-for channel, data in pairs(rgbSliders) do
-    data.bar.MouseButton1Down:Connect(function()
-        draggingRGB = channel
-        local mp = UserInputService:GetMouseLocation()
-        local rel = math.clamp((mp.X - data.bar.AbsolutePosition.X) / data.bar.AbsoluteSize.X, 0, 1)
-        local c = cps_state.currentColor
-        local newC = Color3.new(
-            channel == "R" and rel or c.R,
-            channel == "G" and rel or c.G,
-            channel == "B" and rel or c.B)
-        local h, s, v = Color3.toHSV(newC)
-        cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-        refreshUI()
-    end)
-end
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingRGB and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local data = rgbSliders[draggingRGB]
-        local rel = math.clamp((input.Position.X - data.bar.AbsolutePosition.X) / data.bar.AbsoluteSize.X, 0, 1)
-        local c = cps_state.currentColor
-        local newC = Color3.new(
-            draggingRGB == "R" and rel or c.R,
-            draggingRGB == "G" and rel or c.G,
-            draggingRGB == "B" and rel or c.B)
-        local h, s, v = Color3.toHSV(newC)
-        cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-        refreshUI()
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingRGB = nil end
-end)
-
-hexBox.FocusLost:Connect(function()
-    local col = fromHex(hexBox.Text)
-    if col then
-        local h, s, v = Color3.toHSV(col)
-        cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-        refreshUI()
-    else
-        hexBox.Text = toHex(cps_state.currentColor)
-    end
-end)
-
-local function closePicker()
-    cpGui.Enabled = false
-    cps_state.onLiveChange = nil
-end
-
-cpCancelBtn.MouseButton1Click:Connect(function()
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-    closePicker()
-end)
-
-cpApplyBtn.MouseButton1Click:Connect(closePicker)
-
-cpCloseBtn.MouseButton1Click:Connect(function()
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-    closePicker()
-end)
-
-cpBackdrop.MouseButton1Click:Connect(function()
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-    closePicker()
-end)
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.Escape and cpGui.Enabled then
-        if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-        closePicker()
-    end
-end)
-
-local function openColorPicker(initialColor, onChange)
-    cps_state.originalColor = initialColor or Color3.new(1, 1, 1)
-    local h, s, v = Color3.toHSV(cps_state.originalColor)
-    cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-    cps_state.onLiveChange = onChange
-    cpGui.Enabled = true
-    refreshUI()
-end
-
--- ============================================================
 --  BLOCK 1: ESP (whitelist-aware)
 -- ============================================================
 local espHighlights, espBillboards = {}, {}
-local tracerLines = {}
-
-local function getOrCreateTracer(player)
-    if not tracerLines[player] then
-        local line = Drawing.new("Line")
-        line.Visible = false
-        line.Color = Config.ESP.TracerColor
-        line.Thickness = Config.ESP.TracerThickness
-        line.Transparency = 1
-        line.From = Vector2.new(0, 0); line.To = Vector2.new(0, 0)
-        tracerLines[player] = line
-    end
-    return tracerLines[player]
-end
-
-local function updateTracer(player, character, rootPart, distance)
-    local line = getOrCreateTracer(player)
-    if not Config.ESP.ShowTracers
-        or distance >= Config.ESP.MaxDistForHighlight
-        or Config.Aim.Whitelist[player.Name] then
-        line.Visible = false; return
-    end
-    local targetPos = character:FindFirstChild("Head") or rootPart
-    local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
-    if not onScreen or sp.Z <= 0 then line.Visible = false; return end
-    local viewport = Camera.ViewportSize
-    line.From = Vector2.new(viewport.X / 2, viewport.Y)
-    line.To = Vector2.new(sp.X, sp.Y)
-    line.Color = Config.ESP.TracerColor
-    line.Thickness = Config.ESP.TracerThickness
-    line.Transparency = 1
-    line.Visible = true
-end
-
-local function hideTracer(player)
-    local line = tracerLines[player]; if line then line.Visible = false end
-end
-
-local function destroyTracer(player)
-    local line = tracerLines[player]
-    if line then pcall(function() line:Remove() end); tracerLines[player] = nil end
-end
 
 local function cleanupESPForPlayer(player)
     if espHighlights[player] then espHighlights[player]:Destroy(); espHighlights[player] = nil end
     if espBillboards[player] then espBillboards[player]:Destroy(); espBillboards[player] = nil end
-    hideTracer(player)
 end
 
 local function colorToRichTag(c)
@@ -1001,15 +533,15 @@ end
 local function buildESPLabelText(player, humanoid, distance)
     local lines = {}
     if Config.ESP.ShowName then
-        table.insert(lines, string.format('<font color="%s">%s</font>', colorToRichTag(Config.ESP.NameColor), player.Name))
+        table.insert(lines, string.format('<font color="%s">%s</font>', colorToRichTag(Config.ESP.NameColor or Config.ESP.TextColor), player.Name))
     end
     if Config.ESP.ShowHP then
         table.insert(lines, string.format('<font color="%s">HP: %d/%d</font>',
-            colorToRichTag(Config.ESP.HPColor), math.floor(humanoid.Health), math.floor(humanoid.MaxHealth)))
+            colorToRichTag(Config.ESP.HPColor or Config.ESP.TextColor), math.floor(humanoid.Health), math.floor(humanoid.MaxHealth)))
     end
     if Config.ESP.ShowDistance then
         table.insert(lines, string.format('<font color="%s">Distance: %d studs</font>',
-            colorToRichTag(Config.ESP.DistanceColor), math.floor(distance)))
+            colorToRichTag(Config.ESP.DistanceColor or Config.ESP.TextColor), math.floor(distance)))
     end
     return table.concat(lines, "\n")
 end
@@ -1023,8 +555,6 @@ local function updateESP(player)
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     if not humanoid or not rootPart then return end
     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
-
-    updateTracer(player, character, rootPart, distance)
 
     local isWhitelisted = Config.Aim.Whitelist[player.Name] == true
     local useWLColors = isWhitelisted and Config.ESP.WhitelistHighlight.Enabled
@@ -1102,7 +632,7 @@ end
 
 for _, p in ipairs(Players:GetPlayers()) do setupPlayer(p) end
 Players.PlayerAdded:Connect(setupPlayer)
-Players.PlayerRemoving:Connect(function(p) cleanupESPForPlayer(p); destroyTracer(p) end)
+Players.PlayerRemoving:Connect(function(p) cleanupESPForPlayer(p) end)
 
 RunService.RenderStepped:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do
@@ -1111,7 +641,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 2: AIM  (whitelist-aware, restored)
+--  BLOCK 2: AIM  (players + NPC)
 -- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
@@ -1163,9 +693,8 @@ local function isTargetDirectlyAboveOrBelow()
     return false
 end
 
-local function getClosestPlayerToCursor()
-    local closest, shortDist = nil, Config.Aim.FOVRadius
-    local mousePos = UserInputService:GetMouseLocation()
+local function collectPlayerTargets()
+    local list = {}
     local cameraPos = Camera.CFrame.Position
     local cameraLook = Camera.CFrame.LookVector
     for _, player in ipairs(Players:GetPlayers()) do
@@ -1181,10 +710,55 @@ local function getClosestPlayerToCursor()
         if worldDist > Config.Aim.MaxDistance then continue end
         local dirUnit = (bodyPart.Position - cameraPos).Unit
         if cameraLook:Dot(dirUnit) < Config.Aim.MinDot then continue end
-        local screenPos = getScreenPoint(bodyPart)
-        if not screenPos then continue end
-        local d = (screenPos - mousePos).Magnitude
-        if d < shortDist then shortDist = d; closest = player end
+        table.insert(list, { part = bodyPart, model = character })
+    end
+    return list
+end
+
+local function collectNPCTargets()
+    local list = {}
+    local cameraPos = Camera.CFrame.Position
+    local cameraLook = Camera.CFrame.LookVector
+    for _, model in ipairs(Config.Aim.NPCCachedHeads) do
+        if model and model.Parent then
+            local head = model:FindFirstChild("Head")
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local alive = (hum == nil) or (hum.Health > 0)
+            if head and head:IsA("BasePart") and alive then
+                local worldDist = (head.Position - cameraPos).Magnitude
+                if worldDist <= Config.Aim.NPCMaxDistance then
+                    local dirUnit = (head.Position - cameraPos).Unit
+                    if cameraLook:Dot(dirUnit) >= Config.Aim.MinDot then
+                        table.insert(list, { part = head, model = model })
+                    end
+                end
+            end
+        end
+    end
+    return list
+end
+
+local function getClosestTargetToCursor()
+    local closest, shortDist = nil, Config.Aim.FOVRadius
+    local mousePos = UserInputService:GetMouseLocation()
+
+    local candidates = {}
+    if Config.Aim.Enabled then
+        for _, t in ipairs(collectPlayerTargets()) do table.insert(candidates, t) end
+    end
+    if Config.Aim.NPCAimEnabled then
+        for _, t in ipairs(collectNPCTargets()) do table.insert(candidates, t) end
+    end
+
+    for _, t in ipairs(candidates) do
+        local screenPos = getScreenPoint(t.part)
+        if screenPos then
+            local d = (screenPos - mousePos).Magnitude
+            if d < shortDist then
+                shortDist = d
+                closest = t
+            end
+        end
     end
     return closest
 end
@@ -1192,14 +766,12 @@ end
 local hasMouseMoveRel = type(mousemoverel) == "function"
 
 RunService.RenderStepped:Connect(function()
-    if not Config.Aim.Enabled or not hasMouseMoveRel then return end
+    if (not Config.Aim.Enabled and not Config.Aim.NPCAimEnabled) or not hasMouseMoveRel then return end
     if isTargetDirectlyAboveOrBelow() then return end
-    local target = getClosestPlayerToCursor()
+    local target = getClosestTargetToCursor()
     if not target then return end
-    local character = target.Character
-    if not character then return end
-    local bodyPart = getAimPart(character)
-    if not bodyPart then return end
+    local bodyPart = target.part
+    if not bodyPart or not bodyPart.Parent then return end
     local screenPos = getScreenPoint(bodyPart)
     if not screenPos then return end
     local mousePos = UserInputService:GetMouseLocation()
@@ -1208,6 +780,79 @@ RunService.RenderStepped:Connect(function()
     local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
     local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
     mousemoverel(mx, my)
+end)
+
+-- ============================================================
+--  NPC: SCAN, HIGHLIGHT, AUTO-REFRESH (10 минут)
+-- ============================================================
+local function isModelPlayerCharacter(model)
+    return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+local function clearNPCHighlights()
+    for model, hl in pairs(Config.Aim.NPCHighlights) do
+        if hl and hl.Parent then pcall(function() hl:Destroy() end) end
+    end
+    Config.Aim.NPCHighlights = {}
+end
+
+local function applyNPCHighlight(model)
+    if not model or not model.Parent then return end
+    local h = Config.Aim.NPCHighlights[model]
+    if not h or not h.Parent then
+        h = Instance.new("Highlight")
+        h.Name = "VagrantNPC_Highlight"
+        h.Adornee = model
+        h.FillColor = Color3.fromRGB(255, 40, 40)
+        h.OutlineColor = Color3.fromRGB(255, 80, 80)
+        h.FillTransparency = 0.5
+        h.OutlineTransparency = 0
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = model
+        Config.Aim.NPCHighlights[model] = h
+    else
+        h.Adornee = model
+    end
+end
+
+local function scanNPCs()
+    local found = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and not isModelPlayerCharacter(obj) then
+            local head = obj:FindFirstChild("Head")
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            if head and head:IsA("BasePart") then
+                local alive = (hum == nil) or (hum.Health > 0)
+                if alive then
+                    table.insert(found, obj)
+                end
+            end
+        end
+    end
+    Config.Aim.NPCCachedHeads = found
+    return #found
+end
+
+local function highlightAllNPCs()
+    clearNPCHighlights()
+    for _, model in ipairs(Config.Aim.NPCCachedHeads) do
+        if model and model.Parent then
+            applyNPCHighlight(model)
+        end
+    end
+end
+
+task.spawn(function()
+    task.wait(5)
+    local count = scanNPCs()
+    highlightAllNPCs()
+    print("[NPC] Initial scan: " .. tostring(count) .. " NPC(s)")
+    while true do
+        task.wait(600)
+        count = scanNPCs()
+        highlightAllNPCs()
+        print("[NPC] Auto-refresh (10 min): " .. tostring(count) .. " NPC(s)")
+    end
 end)
 
 -- ============================================================
@@ -1227,31 +872,90 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- ============================================================
---  BLOCK 4: NO SHADOWS
+--  BLOCK 4: FORCE SPEED
 -- ============================================================
-local shadowConnection = nil
-local function applyNoShadows()
-    if Config.NoShadows.Enabled then
-        Lighting.GlobalShadows = false
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then obj.CastShadow = false end
-        end
-        if not shadowConnection then
-            shadowConnection = workspace.DescendantAdded:Connect(function(d)
-                if Config.NoShadows.Enabled and d:IsA("BasePart") then d.CastShadow = false end
+local ForceSpeed = { Part = nil, Weld = nil, BodyVel = nil, Conn = nil }
+
+local function getHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function cleanupForceSpeed()
+    if ForceSpeed.BodyVel then pcall(function() ForceSpeed.BodyVel:Destroy() end); ForceSpeed.BodyVel = nil end
+    if ForceSpeed.Weld then pcall(function() ForceSpeed.Weld:Destroy() end); ForceSpeed.Weld = nil end
+    if ForceSpeed.Part then pcall(function() ForceSpeed.Part:Destroy() end); ForceSpeed.Part = nil end
+end
+
+local function setupForceSpeed()
+    cleanupForceSpeed()
+    local hrp = getHRP()
+    if not hrp then return end
+    local part = Instance.new("Part")
+    part.Name = "VagrantForceSpeed"
+    part.Size = Vector3.new(0.1, 0.1, 0.1)
+    part.Transparency = 1
+    part.CanCollide = false
+    part.CanTouch = false
+    part.CanQuery = false
+    part.Massless = true
+    part.Anchored = false
+    part.Parent = hrp.Parent
+    local weld = Instance.new("Weld")
+    weld.Part0 = hrp; weld.Part1 = part; weld.Parent = part
+    local bodyVel = Instance.new("BodyVelocity")
+    bodyVel.MaxForce = Vector3.new(1e5, 0, 1e5)
+    bodyVel.Velocity = Vector3.zero
+    bodyVel.Parent = part
+    ForceSpeed.Part = part; ForceSpeed.Weld = weld; ForceSpeed.BodyVel = bodyVel
+end
+
+local function setForceSpeedEnabled(enabled)
+    Config.ForceSpeed.Enabled = enabled
+    if enabled then
+        setupForceSpeed()
+        if not ForceSpeed.Conn then
+            ForceSpeed.Conn = RunService.Heartbeat:Connect(function()
+                if not Config.ForceSpeed.Enabled then cleanupForceSpeed(); return end
+                if not (ForceSpeed.BodyVel and ForceSpeed.BodyVel.Parent and ForceSpeed.Part and ForceSpeed.Part.Parent) then setupForceSpeed() end
+                local hum = getHumanoid()
+                if not hum or hum.Health <= 0 then
+                    if ForceSpeed.BodyVel then ForceSpeed.BodyVel.Velocity = Vector3.zero end
+                    return
+                end
+                local moveDir = hum.MoveDirection
+                if moveDir.Magnitude > 0.1 then
+                    local dir = Vector3.new(moveDir.X, 0, moveDir.Z)
+                    if dir.Magnitude > 0 then
+                        local speed = math.clamp(Config.ForceSpeed.Speed, 16, 35)
+                        ForceSpeed.BodyVel.Velocity = dir.Unit * speed
+                    else
+                        ForceSpeed.BodyVel.Velocity = Vector3.zero
+                    end
+                else
+                    ForceSpeed.BodyVel.Velocity = Vector3.zero
+                end
             end)
         end
     else
-        Lighting.GlobalShadows = true
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then obj.CastShadow = true end
-        end
+        if ForceSpeed.Conn then pcall(function() ForceSpeed.Conn:Disconnect() end); ForceSpeed.Conn = nil end
+        cleanupForceSpeed()
     end
 end
-applyNoShadows()
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    cleanupForceSpeed()
+    if Config.ForceSpeed.Enabled then setupForceSpeed() end
+end)
 
 -- ============================================================
---  BLOCK 5: SPECTATE
+--  BLOCK 6: SPECTATE
 -- ============================================================
 local Spectate = { Enabled = false, Target = nil, PrevSubject = nil, PrevType = nil }
 
@@ -1276,9 +980,6 @@ local function setSpectateTarget(player)
     if not Spectate.Enabled then
         Spectate.PrevSubject = Camera.CameraSubject
         Spectate.PrevType = Camera.CameraType
-    end
-    if Freecam and Freecam.Active then
-        stopFreecam(); Config.Freecam.Enabled = false; syncAll()
     end
     Spectate.Enabled = true; Spectate.Target = player
     Camera.CameraSubject = hum; Camera.CameraType = Enum.CameraType.Custom
@@ -1326,119 +1027,6 @@ RunService.RenderStepped:Connect(function()
     else
         Camera.CameraSubject = hum
     end
-end)
-
--- ============================================================
---  BLOCK 6: FREECAM
--- ============================================================
-local PITCH_LIMIT = math.rad(89)
-
-local Freecam = {
-    Active = false, Position = Vector3.new(0, 0, 0), Yaw = 0, Pitch = 0,
-    Keys = {}, SavedWalkSpeed = nil, SavedJumpPower = nil,
-    PrevCameraType = nil, PrevCameraSubject = nil,
-}
-
-local TRACKED_KEYS = {
-    [Enum.KeyCode.W] = true, [Enum.KeyCode.A] = true,
-    [Enum.KeyCode.S] = true, [Enum.KeyCode.D] = true,
-    [Enum.KeyCode.Space] = true, [Enum.KeyCode.LeftControl] = true,
-    [Enum.KeyCode.LeftShift] = true,
-}
-
-local function freezeLocalCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    Freecam.SavedWalkSpeed = hum.WalkSpeed
-    Freecam.SavedJumpPower = hum.JumpPower
-    hum.WalkSpeed = 0; hum.JumpPower = 0
-end
-
-local function unfreezeLocalCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    if Freecam.SavedWalkSpeed then hum.WalkSpeed = Freecam.SavedWalkSpeed end
-    if Freecam.SavedJumpPower then hum.JumpPower = Freecam.SavedJumpPower end
-    Freecam.SavedWalkSpeed = nil; Freecam.SavedJumpPower = nil
-end
-
-function startFreecam()
-    if Freecam.Active then return end
-    if Spectate.Enabled then stopSpectate() end
-    Freecam.Active = true
-    Freecam.PrevCameraType = Camera.CameraType
-    Freecam.PrevCameraSubject = Camera.CameraSubject
-    Freecam.Position = Camera.CFrame.Position
-    local look = Camera.CFrame.LookVector
-    Freecam.Pitch = math.asin(math.clamp(look.Y, -1, 1))
-    Freecam.Yaw = math.atan2(-look.X, -look.Z)
-    Camera.CameraType = Enum.CameraType.Scriptable
-    Camera.CFrame = CFrame.new(Freecam.Position) * CFrame.fromEulerAnglesYXZ(Freecam.Pitch, Freecam.Yaw, 0)
-    freezeLocalCharacter()
-end
-
-function stopFreecam()
-    if not Freecam.Active then return end
-    Freecam.Active = false
-    unfreezeLocalCharacter()
-    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        Camera.CameraType = Enum.CameraType.Custom
-        Camera.CameraSubject = hum
-    elseif Freecam.PrevCameraSubject and Freecam.PrevCameraSubject.Parent then
-        Camera.CameraSubject = Freecam.PrevCameraSubject
-        Camera.CameraType = Freecam.PrevCameraType or Enum.CameraType.Custom
-    end
-    for k in pairs(Freecam.Keys) do Freecam.Keys[k] = false end
-end
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if TRACKED_KEYS[input.KeyCode] and Freecam.Active then Freecam.Keys[input.KeyCode] = true end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if TRACKED_KEYS[input.KeyCode] then Freecam.Keys[input.KeyCode] = false end
-end)
-
-RunService.RenderStepped:Connect(function(dt)
-    if not Freecam.Active then return end
-    local rmbHeld = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    if rmbHeld then
-        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
-            UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-        end
-        local delta = UserInputService:GetMouseDelta()
-        local sens = Config.Freecam.Sensitivity
-        Freecam.Yaw = Freecam.Yaw - delta.X * sens
-        Freecam.Pitch = math.clamp(Freecam.Pitch - delta.Y * sens, -PITCH_LIMIT, PITCH_LIMIT)
-    else
-        if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        end
-    end
-    local rotCF = CFrame.fromEulerAnglesYXZ(Freecam.Pitch, Freecam.Yaw, 0)
-    local move = Vector3.new()
-    if Freecam.Keys[Enum.KeyCode.W] then move = move + rotCF.LookVector end
-    if Freecam.Keys[Enum.KeyCode.S] then move = move - rotCF.LookVector end
-    if Freecam.Keys[Enum.KeyCode.D] then move = move + rotCF.RightVector end
-    if Freecam.Keys[Enum.KeyCode.A] then move = move - rotCF.RightVector end
-    if Freecam.Keys[Enum.KeyCode.Space] then move = move + Vector3.new(0, 1, 0) end
-    if Freecam.Keys[Enum.KeyCode.LeftControl] then move = move - Vector3.new(0, 1, 0) end
-    if move.Magnitude > 0 then
-        local speed = 60 * Config.Freecam.Speed
-        if Freecam.Keys[Enum.KeyCode.LeftShift] then speed = speed * 3 end
-        Freecam.Position = Freecam.Position + move.Unit * speed * dt
-    end
-    Camera.CFrame = CFrame.new(Freecam.Position) * rotCF
-end)
-
-LocalPlayer.CharacterAdded:Connect(function()
-    if Freecam.Active then stopFreecam() end
 end)
 
 -- ============================================================
@@ -1736,42 +1324,19 @@ local function makeTrioBtn(parent, name, cb)
     return btn
 end
 
-local function makeColorPicker(parent, name, getter, setter)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 30); row.BorderSizePixel = 0; row.Parent = parent
-    addBtn(row)
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -104, 1, 0); lbl.Position = UDim2.new(0, 10, 0, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextSize = 11
-    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-    addText(lbl); addFont(lbl)
-
-    local preview = Instance.new("Frame")
-    preview.Size = UDim2.new(0, 22, 0, 20); preview.Position = UDim2.new(1, -96, 0, 5)
-    preview.BorderSizePixel = 0; preview.Parent = row
-    local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 4); pc.Parent = preview
-    local ps = Instance.new("UIStroke"); ps.Thickness = 1; ps.Color = Color3.fromRGB(120, 120, 120); ps.Parent = preview
-
+local function makeWideBtn(parent, name, cb)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 68, 0, 20); btn.Position = UDim2.new(1, -70, 0, 5)
-    btn.BorderSizePixel = 0
-    btn.Text = "Change"; btn.TextSize = 10
-    btn.AutoButtonColor = true; btn.Parent = row
-    addBtn(btn); addText(btn); addFont(btn)
-    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
-
-    registerSync(function() preview.BackgroundColor3 = getter() end)
-
-    btn.MouseButton1Click:Connect(function()
-        openColorPicker(getter(), function(col) setter(col); syncAll() end)
-    end)
-
-    return row
+    btn.Size = UDim2.new(1, 0, 0, 28); btn.BorderSizePixel = 0
+    btn.Text = name; btn.TextSize = 12
+    btn.AutoButtonColor = true; btn.Parent = parent
+    addBtn(btn)
+    addText(btn); addFont(btn)
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
+    btn.MouseButton1Click:Connect(cb)
+    return btn
 end
 
-local tabNames = { "Customization", "Game", "Game Customization", "Servers" }
+local tabNames = { "Customization", "Game", "Game Customization", "Movement" }
 local tabButtons, tabFrames = {}, {}
 
 local function switchTab(name)
@@ -1817,18 +1382,11 @@ end
 local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
-local serversTab = tabFrames["Servers"]
+local movementTab = tabFrames["Movement"]
 
 -- ============================================================
 --  TAB: CUSTOMIZATION
 -- ============================================================
-makeSectionHeader(customTab, "THEME COLORS")
-makeColorPicker(customTab, "Background", function() return Theme.Background end, function(c) Theme.Background = c; applyTheme() end)
-makeColorPicker(customTab, "Buttons", function() return Theme.Button end, function(c) Theme.Button = c; applyTheme() end)
-makeColorPicker(customTab, "Outline", function() return Theme.Outline end, function(c) Theme.Outline = c; applyTheme() end)
-makeColorPicker(customTab, "Accent", function() return Theme.Accent end, function(c) Theme.Accent = c; applyTheme() end)
-makeColorPicker(customTab, "Text", function() return Theme.Text end, function(c) Theme.Text = c; applyTheme() end)
-
 makeSectionHeader(customTab, "FONT")
 
 local fontRow = Instance.new("Frame")
@@ -1917,12 +1475,7 @@ changelogBtn.MouseButton1Click:Connect(function() openChangelog() end)
 -- ============================================================
 --  TAB: GAME
 -- ============================================================
-makeSectionHeader(gameTab, "MOVEMENT")
-makeToggle(gameTab, "Infinite Jump",
-    function() return Config.InfiniteJump.Enabled end,
-    function(v) Config.InfiniteJump.Enabled = v end)
-
-makeSectionHeader(gameTab, "AIM")
+makeSectionHeader(gameTab, "AIM (PLAYERS)")
 makeToggle(gameTab, "Aim Enabled",
     function() return Config.Aim.Enabled end,
     function(v) Config.Aim.Enabled = v end)
@@ -2005,25 +1558,41 @@ makeSlider(gameTab, "Min height diff (studs)", 1, 20,
     function() return Config.Aim.VerticalBlockMinHeight end,
     function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
 
-makeSectionHeader(gameTab, "FREECAM")
-makeToggle(gameTab, "Freecam Enabled",
-    function() return Config.Freecam.Enabled end,
-    function(v) Config.Freecam.Enabled = v end,
-    function(v) if v then startFreecam() else stopFreecam() end end)
-makeSlider(gameTab, "Flight speed", 0.2, 5.0,
-    function() return Config.Freecam.Speed end,
-    function(v) Config.Freecam.Speed = v end, false)
-makeSlider(gameTab, "Mouse sensitivity", 0.0005, 0.01,
-    function() return Config.Freecam.Sensitivity end,
-    function(v) Config.Freecam.Sensitivity = v end, false)
+-- NPC AIM SECTION
+makeSectionHeader(gameTab, "AIM (NPC)")
+makeToggle(gameTab, "NPC Aim Enabled",
+    function() return Config.Aim.NPCAimEnabled end,
+    function(v) Config.Aim.NPCAimEnabled = v end)
+makeSlider(gameTab, "NPC Max Distance (studs)", 50, 3000,
+    function() return Config.Aim.NPCMaxDistance end,
+    function(v) Config.Aim.NPCMaxDistance = v end, true)
 
-local freecamHelp = Instance.new("TextLabel")
-freecamHelp.Size = UDim2.new(1, 0, 0, 34); freecamHelp.BackgroundTransparency = 1
-freecamHelp.Text = "WASD — fly • Space — up • LeftCtrl — down\nLeftShift — boost • RMB — rotate camera"
-freecamHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
-freecamHelp.TextSize = 10
-freecamHelp.TextWrapped = true; freecamHelp.Parent = gameTab
-addFont(freecamHelp)
+local npcStatusLbl = Instance.new("TextLabel")
+npcStatusLbl.Size = UDim2.new(1, 0, 0, 18); npcStatusLbl.BackgroundTransparency = 1
+npcStatusLbl.Text = "NPCs cached: " .. tostring(#Config.Aim.NPCCachedHeads)
+npcStatusLbl.TextColor3 = Color3.fromRGB(170, 170, 170); npcStatusLbl.TextSize = 11
+npcStatusLbl.TextXAlignment = Enum.TextXAlignment.Left; npcStatusLbl.Parent = gameTab
+addFont(npcStatusLbl)
+
+makeWideBtn(gameTab, "Scan Workspace for NPCs", function()
+    local count = scanNPCs()
+    highlightAllNPCs()
+    npcStatusLbl.Text = "NPCs cached: " .. tostring(count)
+    showNotification("NPC Scan", "Found " .. tostring(count) .. " NPC(s), highlighted red", 4, false)
+end)
+
+makeWideBtn(gameTab, "Clear NPC Cache", function()
+    Config.Aim.NPCCachedHeads = {}
+    clearNPCHighlights()
+    npcStatusLbl.Text = "NPCs cached: 0"
+end)
+
+local npcHelp = Instance.new("TextLabel")
+npcHelp.Size = UDim2.new(1, 0, 0, 32); npcHelp.BackgroundTransparency = 1
+npcHelp.Text = "Auto-refreshes every 10 minutes. Cached NPCs are highlighted in red."
+npcHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
+npcHelp.TextSize = 10; npcHelp.TextWrapped = true; npcHelp.Parent = gameTab
+addFont(npcHelp)
 
 makeSectionHeader(gameTab, "SPECTATE")
 makeToggle(gameTab, "Spectate Enabled",
@@ -2147,6 +1716,30 @@ task.spawn(function()
 end)
 
 -- ============================================================
+--  TAB: MOVEMENT
+-- ============================================================
+makeSectionHeader(movementTab, "JUMP")
+makeToggle(movementTab, "Infinite Jump",
+    function() return Config.InfiniteJump.Enabled end,
+    function(v) Config.InfiniteJump.Enabled = v end)
+
+makeSectionHeader(movementTab, "FORCE SPEED")
+makeToggle(movementTab, "Force Speed Enabled",
+    function() return Config.ForceSpeed.Enabled end,
+    function(v) setForceSpeedEnabled(v) end)
+makeSlider(movementTab, "Force Speed (16-35)", 16, 35,
+    function() return Config.ForceSpeed.Speed end,
+    function(v) Config.ForceSpeed.Speed = v end, true)
+
+local forceHelp = Instance.new("TextLabel")
+forceHelp.Size = UDim2.new(1, 0, 0, 44); forceHelp.BackgroundTransparency = 1
+forceHelp.Text = "Invisible welded part with BodyVelocity.\nAccelerates only while you hold movement — stops when you release (like WalkSpeed).\nSpeed 16 = normal walk pace, 35 = max."
+forceHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
+forceHelp.TextSize = 10
+forceHelp.TextWrapped = true; forceHelp.Parent = movementTab
+addFont(forceHelp)
+
+-- ============================================================
 --  TAB: GAME CUSTOMIZATION
 -- ============================================================
 makeSectionHeader(gameCustTab, "ESP")
@@ -2165,48 +1758,10 @@ makeToggle(gameCustTab, "Show Name", function() return Config.ESP.ShowName end, 
 makeToggle(gameCustTab, "Show HP", function() return Config.ESP.ShowHP end, function(v) Config.ESP.ShowHP = v end)
 makeToggle(gameCustTab, "Show Distance", function() return Config.ESP.ShowDistance end, function(v) Config.ESP.ShowDistance = v end)
 
-makeSectionHeader(gameCustTab, "ESP — TRACERS")
-makeToggle(gameCustTab, "Tracers Enabled",
-    function() return Config.ESP.ShowTracers end,
-    function(v)
-        Config.ESP.ShowTracers = v
-        if not v then for player in pairs(tracerLines) do hideTracer(player) end end
-    end)
-makeSlider(gameCustTab, "Tracer thickness", 1, 5,
-    function() return Config.ESP.TracerThickness end,
-    function(v) Config.ESP.TracerThickness = v end,
-    true,
-    function(v) for _, line in pairs(tracerLines) do line.Thickness = v end end)
-makeColorPicker(gameCustTab, "Tracer color",
-    function() return Config.ESP.TracerColor end,
-    function(c)
-        Config.ESP.TracerColor = c
-        for _, line in pairs(tracerLines) do line.Color = c end
-    end)
-
-makeSectionHeader(gameCustTab, "ESP — COLORS")
-makeColorPicker(gameCustTab, "Name color", function() return Config.ESP.NameColor end, function(c) Config.ESP.NameColor = c end)
-makeColorPicker(gameCustTab, "HP color", function() return Config.ESP.HPColor end, function(c) Config.ESP.HPColor = c end)
-makeColorPicker(gameCustTab, "Distance color", function() return Config.ESP.DistanceColor end, function(c) Config.ESP.DistanceColor = c end)
-makeColorPicker(gameCustTab, "Highlight fill color", function() return Config.ESP.HighlightColor end, function(c) Config.ESP.HighlightColor = c end)
-makeColorPicker(gameCustTab, "Highlight outline color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
-
 makeSectionHeader(gameCustTab, "WHITELIST — HIGHLIGHT")
 makeToggle(gameCustTab, "Whitelist highlight enabled",
     function() return Config.ESP.WhitelistHighlight.Enabled end,
     function(v) Config.ESP.WhitelistHighlight.Enabled = v end)
-makeColorPicker(gameCustTab, "Whitelist fill color",
-    function() return Config.ESP.WhitelistHighlight.FillColor end,
-    function(c) Config.ESP.WhitelistHighlight.FillColor = c end)
-makeColorPicker(gameCustTab, "Whitelist outline color",
-    function() return Config.ESP.WhitelistHighlight.OutlineColor end,
-    function(c) Config.ESP.WhitelistHighlight.OutlineColor = c end)
-
-makeSectionHeader(gameCustTab, "VISUAL")
-makeToggle(gameCustTab, "No Shadows",
-    function() return Config.NoShadows.Enabled end,
-    function(v) Config.NoShadows.Enabled = v end,
-    function() applyNoShadows() end)
 
 makeSectionHeader(gameCustTab, "WHITELIST — Aim ignores these players")
 
@@ -2315,10 +1870,6 @@ makeTrioBtn(wlBtnRow, "Clear", function()
 end)
 
 refreshWhitelistUI()
-
--- ============================================================
---  TAB: SERVERS (empty for now)
--- ============================================================
 
 -- ============================================================
 --  F1 — TOGGLE
