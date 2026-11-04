@@ -1,8 +1,3 @@
--- ============================================================
---   Vagrant Survival Best Script
---   by Dokoo2
--- ============================================================
-
 if _G.VagrantScriptLoaded then
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -18,7 +13,6 @@ _G.VagrantScriptLoaded = true
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local LocalPlayer = Players.LocalPlayer
@@ -33,9 +27,6 @@ else
     guiParent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- ============================================================
---  SPLASH
--- ============================================================
 local function showSplash()
     local splashGui = Instance.new("ScreenGui")
     splashGui.Name = "VagrantSplash"
@@ -116,9 +107,6 @@ end
 
 showSplash()
 
--- ============================================================
---  ROBLOX-STYLE NOTIFICATION
--- ============================================================
 local _activeNotifs = {}
 
 local function _repositionNotifs()
@@ -230,13 +218,6 @@ local function showNotification(title, body, duration, playSound)
     end)
 end
 
-task.spawn(function()
-    showNotification("Warning", "Your game may lag", 5, true)
-end)
-
--- ============================================================
---  CONFIG
--- ============================================================
 local Config = {
     ESP = {
         Enabled = false,
@@ -260,9 +241,11 @@ local Config = {
         NPCAimEnabled = false,
         NPCMaxDistance = 500,
         NPCCachedHeads = {},
-        NPCModelCache = {},
         NPCHighlights = {},
-        NPCSpeed = 16,
+        NPCBillboards = {},
+        NPCShowHP = true,
+        NPCShowDistance = true,
+        NPCTextSize = 14,
     },
     InfiniteJump = { Enabled = false },
     ForceSpeed = { Enabled = false, Speed = 24 },
@@ -271,9 +254,6 @@ local Config = {
     Font = "Silkscreen",
 }
 
--- ============================================================
---  FONTS
--- ============================================================
 local FONT_OPTIONS = {
     Ubuntu = Enum.Font.Ubuntu, Calibri = Enum.Font.Gotham,
     ComicSans = Enum.Font.Cartoon, Silkscreen = Enum.Font.Arcade,
@@ -288,9 +268,6 @@ local function applyFont()
     for _, el in ipairs(FontRefs) do pcall(function() el.Font = f end) end
 end
 
--- ============================================================
---  THEME
--- ============================================================
 local DEFAULT_THEME = {
     Background = Color3.fromRGB(10, 8, 14),
     Panel = Color3.fromRGB(45, 35, 15),
@@ -325,9 +302,6 @@ local function applyTheme()
     syncAll()
 end
 
--- ============================================================
---  CUSTOM CURSOR
--- ============================================================
 local CursorCfg = Config.Cursor
 
 local function getHighestGuiParent()
@@ -412,9 +386,6 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
---  CHANGELOG POPUP
--- ============================================================
 local clGui = Instance.new("ScreenGui")
 clGui.Name = "VagrantChangelog"
 clGui.ResetOnSpawn = false
@@ -478,21 +449,7 @@ local clc = Instance.new("UICorner"); clc.CornerRadius = UDim.new(0, 4); clc.Par
 local clBody = Instance.new("TextLabel")
 clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 42)
 clBody.BackgroundTransparency = 1
-clBody.Text =
-    "Updated The Golden UI\n" ..
-    "-Removed tracers\n" ..
-    "-Removed freecam\n" ..
-    "-Removed color customization\n" ..
-    "-Removed Servers tab\n" ..
-    "-Removed No Shadows\n" ..
-    "-Added Movement tab\n" ..
-    "-Force Speed rewritten (MoveDirection + BodyVelocity, WalkSpeed-like)\n" ..
-    "-Added NPC Aim (separate from Player Aim)\n" ..
-    "-NPC cache auto-refreshes every 10 minutes, NPCs highlighted red\n" ..
-    "-Added View Changelog button (bottom of Customization)\n" ..
-    "-Added resizable menu with proportional buttons\n" ..
-    "-Whitelisted players highlighted in green with white outline\n" ..
-    "-Whitelist excludes players from aim"
+clBody.Text = ""
 clBody.TextColor3 = Theme.Text
 clBody.TextSize = 12
 clBody.TextWrapped = true
@@ -515,9 +472,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
     if input.KeyCode == Enum.KeyCode.Escape and clGui.Enabled then closeChangelog() end
 end)
 
--- ============================================================
---  BLOCK 1: ESP (whitelist-aware)
--- ============================================================
 local espHighlights, espBillboards = {}, {}
 
 local function cleanupESPForPlayer(player)
@@ -640,9 +594,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================================================
---  BLOCK 2: AIM  (players + NPC)
--- ============================================================
 local fovCircle = Drawing.new("Circle")
 fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
 fovCircle.Transparency = 0; fovCircle.Filled = false
@@ -782,9 +733,6 @@ RunService.RenderStepped:Connect(function()
     mousemoverel(mx, my)
 end)
 
--- ============================================================
---  NPC: SCAN, HIGHLIGHT, AUTO-REFRESH (10 минут)
--- ============================================================
 local function isModelPlayerCharacter(model)
     return Players:GetPlayerFromCharacter(model) ~= nil
 end
@@ -794,6 +742,13 @@ local function clearNPCHighlights()
         if hl and hl.Parent then pcall(function() hl:Destroy() end) end
     end
     Config.Aim.NPCHighlights = {}
+end
+
+local function clearNPCBills()
+    for model, bb in pairs(Config.Aim.NPCBillboards) do
+        if bb and bb.Parent then pcall(function() bb:Destroy() end) end
+    end
+    Config.Aim.NPCBillboards = {}
 end
 
 local function applyNPCHighlight(model)
@@ -812,6 +767,55 @@ local function applyNPCHighlight(model)
         Config.Aim.NPCHighlights[model] = h
     else
         h.Adornee = model
+    end
+end
+
+local function applyNPCB Billboard(model)
+    if not model or not model.Parent then return end
+    local head = model:FindFirstChild("Head")
+    if not head or not head:IsA("BasePart") then return end
+    local bb = Config.Aim.NPCBillboards[model]
+    if not bb or not bb.Parent then
+        bb = Instance.new("BillboardGui")
+        bb.Name = "VagrantNPC_Billboard"
+        bb.Adornee = head
+        bb.Size = UDim2.new(0, 200, 0, 50)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        bb.MaxDistance = math.huge
+        local lbl = Instance.new("TextLabel")
+        lbl.Name = "NPC_Label"
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+        lbl.TextStrokeTransparency = 0
+        lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        lbl.TextSize = Config.Aim.NPCTextSize
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextXAlignment = Enum.TextXAlignment.Center
+        lbl.TextYAlignment = Enum.TextYAlignment.Center
+        lbl.RichText = true
+        lbl.Parent = bb
+        bb.Parent = head
+        Config.Aim.NPCBillboards[model] = bb
+    else
+        bb.Adornee = head
+    end
+
+    local lbl = bb:FindFirstChild("NPC_Label")
+    if lbl then
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        local lines = {}
+        table.insert(lines, string.format('<font color="rgb(255,120,120)">%s</font>', model.Name))
+        if hum then
+            table.insert(lines, string.format('<font color="rgb(255,60,60)">HP: %d/%d</font>',
+                math.floor(hum.Health), math.floor(hum.MaxHealth)))
+        end
+        local dist = (head.Position - Camera.CFrame.Position).Magnitude
+        table.insert(lines, string.format('<font color="rgb(255,180,180)">Distance: %d studs</font>', math.floor(dist)))
+        lbl.TextSize = Config.Aim.NPCTextSize
+        lbl.RichText = true
+        lbl.Text = table.concat(lines, "\n")
     end
 end
 
@@ -835,12 +839,26 @@ end
 
 local function highlightAllNPCs()
     clearNPCHighlights()
+    clearNPCBills()
     for _, model in ipairs(Config.Aim.NPCCachedHeads) do
         if model and model.Parent then
             applyNPCHighlight(model)
+            applyNPCB Billboard(model)
         end
     end
 end
+
+local npcAcc = 0
+RunService.Heartbeat:Connect(function(dt)
+    npcAcc = npcAcc + dt
+    if npcAcc < 0.2 then return end
+    npcAcc = 0
+    for _, model in ipairs(Config.Aim.NPCCachedHeads) do
+        if model and model.Parent then
+            applyNPCB Billboard(model)
+        end
+    end
+end)
 
 task.spawn(function()
     task.wait(5)
@@ -855,9 +873,6 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
---  BLOCK 3: INFINITE JUMP
--- ============================================================
 local function performJump()
     if not Config.InfiniteJump.Enabled then return end
     local char = LocalPlayer.Character
@@ -871,9 +886,6 @@ UserInputService.JumpRequest:Connect(function()
     if Config.InfiniteJump.Enabled then performJump() end
 end)
 
--- ============================================================
---  BLOCK 4: FORCE SPEED
--- ============================================================
 local ForceSpeed = { Part = nil, Weld = nil, BodyVel = nil, Conn = nil }
 
 local function getHRP()
@@ -932,7 +944,11 @@ local function setForceSpeedEnabled(enabled)
                 if moveDir.Magnitude > 0.1 then
                     local dir = Vector3.new(moveDir.X, 0, moveDir.Z)
                     if dir.Magnitude > 0 then
-                        local speed = math.clamp(Config.ForceSpeed.Speed, 16, 35)
+                        local baseSpeed = math.clamp(Config.ForceSpeed.Speed, 16, 30)
+                        local speed = baseSpeed
+                        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                            speed = math.min(35, baseSpeed + 5)
+                        end
                         ForceSpeed.BodyVel.Velocity = dir.Unit * speed
                     else
                         ForceSpeed.BodyVel.Velocity = Vector3.zero
@@ -954,9 +970,6 @@ LocalPlayer.CharacterAdded:Connect(function()
     if Config.ForceSpeed.Enabled then setupForceSpeed() end
 end)
 
--- ============================================================
---  BLOCK 6: SPECTATE
--- ============================================================
 local Spectate = { Enabled = false, Target = nil, PrevSubject = nil, PrevType = nil }
 
 local function getSpectateList()
@@ -1029,9 +1042,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================================================
---  BLOCK 7: MENU
--- ============================================================
 local oldMenu = guiParent:FindFirstChild("VagrantMenu")
 if oldMenu then oldMenu:Destroy() end
 
@@ -1384,9 +1394,6 @@ local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
 local movementTab = tabFrames["Movement"]
 
--- ============================================================
---  TAB: CUSTOMIZATION
--- ============================================================
 makeSectionHeader(customTab, "FONT")
 
 local fontRow = Instance.new("Frame")
@@ -1472,11 +1479,8 @@ addBtn(changelogBtn); addText(changelogBtn); addFont(changelogBtn)
 local clbtnc = Instance.new("UICorner"); clbtnc.CornerRadius = UDim.new(0, 6); clbtnc.Parent = changelogBtn
 changelogBtn.MouseButton1Click:Connect(function() openChangelog() end)
 
--- ============================================================
---  TAB: GAME
--- ============================================================
-makeSectionHeader(gameTab, "AIM (PLAYERS)")
-makeToggle(gameTab, "Aim Enabled",
+makeSectionHeader(gameTab, "AIMBOT (PLAYERS)")
+makeToggle(gameTab, "Aimbot Enabled",
     function() return Config.Aim.Enabled end,
     function(v) Config.Aim.Enabled = v end)
 
@@ -1558,14 +1562,16 @@ makeSlider(gameTab, "Min height diff (studs)", 1, 20,
     function() return Config.Aim.VerticalBlockMinHeight end,
     function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
 
--- NPC AIM SECTION
-makeSectionHeader(gameTab, "AIM (NPC)")
-makeToggle(gameTab, "NPC Aim Enabled",
+makeSectionHeader(gameTab, "AIMBOT (NPC)")
+makeToggle(gameTab, "NPC Aimbot Enabled",
     function() return Config.Aim.NPCAimEnabled end,
     function(v) Config.Aim.NPCAimEnabled = v end)
 makeSlider(gameTab, "NPC Max Distance (studs)", 50, 3000,
     function() return Config.Aim.NPCMaxDistance end,
     function(v) Config.Aim.NPCMaxDistance = v end, true)
+makeSlider(gameTab, "NPC Text Size", 8, 32,
+    function() return Config.Aim.NPCTextSize end,
+    function(v) Config.Aim.NPCTextSize = v end, true)
 
 local npcStatusLbl = Instance.new("TextLabel")
 npcStatusLbl.Size = UDim2.new(1, 0, 0, 18); npcStatusLbl.BackgroundTransparency = 1
@@ -1584,15 +1590,9 @@ end)
 makeWideBtn(gameTab, "Clear NPC Cache", function()
     Config.Aim.NPCCachedHeads = {}
     clearNPCHighlights()
+    clearNPCBills()
     npcStatusLbl.Text = "NPCs cached: 0"
 end)
-
-local npcHelp = Instance.new("TextLabel")
-npcHelp.Size = UDim2.new(1, 0, 0, 32); npcHelp.BackgroundTransparency = 1
-npcHelp.Text = "Auto-refreshes every 10 minutes. Cached NPCs are highlighted in red."
-npcHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
-npcHelp.TextSize = 10; npcHelp.TextWrapped = true; npcHelp.Parent = gameTab
-addFont(npcHelp)
 
 makeSectionHeader(gameTab, "SPECTATE")
 makeToggle(gameTab, "Spectate Enabled",
@@ -1715,9 +1715,6 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
---  TAB: MOVEMENT
--- ============================================================
 makeSectionHeader(movementTab, "JUMP")
 makeToggle(movementTab, "Infinite Jump",
     function() return Config.InfiniteJump.Enabled end,
@@ -1727,21 +1724,10 @@ makeSectionHeader(movementTab, "FORCE SPEED")
 makeToggle(movementTab, "Force Speed Enabled",
     function() return Config.ForceSpeed.Enabled end,
     function(v) setForceSpeedEnabled(v) end)
-makeSlider(movementTab, "Force Speed (16-35)", 16, 35,
+makeSlider(movementTab, "Force Speed (16-30)", 16, 30,
     function() return Config.ForceSpeed.Speed end,
     function(v) Config.ForceSpeed.Speed = v end, true)
 
-local forceHelp = Instance.new("TextLabel")
-forceHelp.Size = UDim2.new(1, 0, 0, 44); forceHelp.BackgroundTransparency = 1
-forceHelp.Text = "Invisible welded part with BodyVelocity.\nAccelerates only while you hold movement — stops when you release (like WalkSpeed).\nSpeed 16 = normal walk pace, 35 = max."
-forceHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
-forceHelp.TextSize = 10
-forceHelp.TextWrapped = true; forceHelp.Parent = movementTab
-addFont(forceHelp)
-
--- ============================================================
---  TAB: GAME CUSTOMIZATION
--- ============================================================
 makeSectionHeader(gameCustTab, "ESP")
 makeToggle(gameCustTab, "ESP Enabled",
     function() return Config.ESP.Enabled end,
@@ -1753,17 +1739,17 @@ makeSlider(gameCustTab, "Text size", 8, 32,
     function() return Config.ESP.TextSize end,
     function(v) Config.ESP.TextSize = v end, true)
 
-makeSectionHeader(gameCustTab, "ESP — ELEMENTS")
+makeSectionHeader(gameCustTab, "ESP ELEMENTS")
 makeToggle(gameCustTab, "Show Name", function() return Config.ESP.ShowName end, function(v) Config.ESP.ShowName = v end)
 makeToggle(gameCustTab, "Show HP", function() return Config.ESP.ShowHP end, function(v) Config.ESP.ShowHP = v end)
 makeToggle(gameCustTab, "Show Distance", function() return Config.ESP.ShowDistance end, function(v) Config.ESP.ShowDistance = v end)
 
-makeSectionHeader(gameCustTab, "WHITELIST — HIGHLIGHT")
+makeSectionHeader(gameCustTab, "WHITELIST HIGHLIGHT")
 makeToggle(gameCustTab, "Whitelist highlight enabled",
     function() return Config.ESP.WhitelistHighlight.Enabled end,
     function(v) Config.ESP.WhitelistHighlight.Enabled = v end)
 
-makeSectionHeader(gameCustTab, "WHITELIST — Aim ignores these players")
+makeSectionHeader(gameCustTab, "WHITELIST Aimbot ignores these players")
 
 local wlListFrame
 local refreshWhitelistUI
@@ -1871,9 +1857,6 @@ end)
 
 refreshWhitelistUI()
 
--- ============================================================
---  F1 — TOGGLE
--- ============================================================
 local menuOpen = true
 local function setMenuOpen(state) menuOpen = state; main.Visible = state end
 
