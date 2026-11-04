@@ -1,24 +1,18 @@
--- ============================================================
---   Spy tool
---   ESP • Spectate • Freecam • No Shadows
--- ============================================================
-
-if _G.SpyToolLoaded then
+if _G.VagrantScriptLoaded then
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Spy tool",
+            Title = "Vagrant Survival",
             Text = "Don't launch more than once!",
             Duration = 5,
         })
     end)
     return
 end
-_G.SpyToolLoaded = true
+_G.VagrantScriptLoaded = true
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local LocalPlayer = Players.LocalPlayer
@@ -32,12 +26,9 @@ else
     guiParent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- ============================================================
---  SPLASH
--- ============================================================
 local function showSplash()
     local splashGui = Instance.new("ScreenGui")
-    splashGui.Name = "SpyToolSplash"
+    splashGui.Name = "VagrantSplash"
     splashGui.ResetOnSpawn = false
     splashGui.IgnoreGuiInset = true
     splashGui.DisplayOrder = 9999
@@ -55,13 +46,13 @@ local function showSplash()
 
     local ttl = Instance.new("TextLabel")
     ttl.Size = UDim2.new(1, 0, 0, 26); ttl.Position = UDim2.new(0, 0, 0, 14)
-    ttl.BackgroundTransparency = 1; ttl.Text = "Spy tool"
+    ttl.BackgroundTransparency = 1; ttl.Text = "Vagrant Survival Best Script"
     ttl.TextColor3 = Color3.fromRGB(230, 230, 230); ttl.Font = Enum.Font.Ubuntu; ttl.TextSize = 15
     ttl.Parent = card
 
     local sub = Instance.new("TextLabel")
     sub.Size = UDim2.new(1, 0, 0, 16); sub.Position = UDim2.new(0, 0, 0, 40)
-    sub.BackgroundTransparency = 1; sub.Text = "ESP • Spectate • Freecam • No Shadows"
+    sub.BackgroundTransparency = 1; sub.Text = "by Dokoo2"
     sub.TextColor3 = Color3.fromRGB(255, 215, 0); sub.Font = Enum.Font.Ubuntu; sub.TextSize = 11
     sub.Parent = card
 
@@ -115,27 +106,130 @@ end
 
 showSplash()
 
--- ============================================================
---  CONFIG
--- ============================================================
+local _activeNotifs = {}
+
+local function _repositionNotifs()
+    for i, entry in ipairs(_activeNotifs) do
+        if entry.card and entry.card.Parent then
+            TweenService:Create(entry.card, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -370, 0, 24 + (i - 1) * 110)
+            }):Play()
+        end
+    end
+end
+
+local function showNotification(title, body, duration, playSound)
+    if playSound == nil then playSound = true end
+
+    local notifGui = Instance.new("ScreenGui")
+    notifGui.Name = "VagrantNotif"
+    notifGui.ResetOnSpawn = false
+    notifGui.IgnoreGuiInset = true
+    notifGui.DisplayOrder = 9998
+    notifGui.Parent = guiParent
+
+    if playSound then
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://4590662766"
+        sound.Volume = 0.5
+        sound.Parent = SoundService
+        pcall(function() sound:Play() end)
+        task.delay(6, function() pcall(function() sound:Destroy() end) end)
+    end
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(0, 350, 0, 100)
+    card.Position = UDim2.new(1, 20, 0, 24)
+    card.BackgroundColor3 = Color3.fromRGB(35, 37, 39)
+    card.BorderSizePixel = 0
+    card.Parent = notifGui
+    local ncc = Instance.new("UICorner"); ncc.CornerRadius = UDim.new(0, 6); ncc.Parent = card
+
+    local iconBg = Instance.new("Frame")
+    iconBg.Size = UDim2.new(0, 32, 0, 32); iconBg.Position = UDim2.new(0, 12, 0, 12)
+    iconBg.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
+    iconBg.BorderSizePixel = 0; iconBg.Parent = card
+    local ibc = Instance.new("UICorner"); ibc.CornerRadius = UDim.new(1, 0); ibc.Parent = iconBg
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Size = UDim2.new(1, 0, 1, 0); iconLbl.BackgroundTransparency = 1
+    iconLbl.Text = "!"; iconLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    iconLbl.Font = Enum.Font.GothamBold; iconLbl.TextSize = 20
+    iconLbl.Parent = iconBg
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -70, 0, 22); titleLbl.Position = UDim2.new(0, 52, 0, 8)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = title
+    titleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLbl.Font = Enum.Font.GothamBold; titleLbl.TextSize = 15
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Parent = card
+
+    local bodyLbl = Instance.new("TextLabel")
+    bodyLbl.Size = UDim2.new(1, -70, 0, 40); bodyLbl.Position = UDim2.new(0, 52, 0, 28)
+    bodyLbl.BackgroundTransparency = 1
+    bodyLbl.Text = body
+    bodyLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+    bodyLbl.Font = Enum.Font.Gotham; bodyLbl.TextSize = 13
+    bodyLbl.TextWrapped = true
+    bodyLbl.TextXAlignment = Enum.TextXAlignment.Left
+    bodyLbl.TextYAlignment = Enum.TextYAlignment.Top
+    bodyLbl.Parent = card
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 24, 0, 24); closeBtn.Position = UDim2.new(1, -32, 0, 8)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    closeBtn.TextSize = 14; closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.AutoButtonColor = false; closeBtn.Parent = card
+
+    local entry = {card = card, gui = notifGui}
+    table.insert(_activeNotifs, entry)
+
+    local targetY = 24 + (#_activeNotifs - 1) * 110
+    TweenService:Create(card,
+        TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        { Position = UDim2.new(1, -370, 0, targetY) }):Play()
+
+    local dismissed = false
+    local function dismiss()
+        if dismissed then return end
+        dismissed = true
+        for i, n in ipairs(_activeNotifs) do
+            if n == entry then table.remove(_activeNotifs, i); break end
+        end
+        local outTween = TweenService:Create(card,
+            TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+            { Position = UDim2.new(1, 20, 0, card.Position.Y.Offset) })
+        outTween:Play()
+        outTween.Completed:Connect(function()
+            pcall(function() notifGui:Destroy() end)
+            _repositionNotifs()
+        end)
+    end
+
+    closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255) end)
+    closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(180, 180, 180) end)
+    closeBtn.MouseButton1Click:Connect(dismiss)
+
+    task.delay(duration, function()
+        if notifGui and notifGui.Parent then dismiss() end
+    end)
+end
+
 local Config = {
     ESP = {
         Enabled = false,
-        ShowHighlight = false,               -- подсветка по умолчанию ОТКЛЮЧЕНА
+        ShowHighlight = false,
         MaxDistForHighlight = 500,
         HighlightColor = Color3.fromRGB(255, 215, 0),
         OutlineColor = Color3.fromRGB(255, 240, 180),
         TextColor = Color3.fromRGB(255, 230, 150),
         TextSize = 14,
-        ShowName = true,
-        ShowHP = true,
-        ShowPlayerId = true,                 -- вместо distance — ID игрока
+        ShowName = true, ShowHP = true, ShowPlayerId = true,
         NameColor = Color3.fromRGB(255, 200, 80),
         HPColor = Color3.fromRGB(255, 170, 40),
         PlayerIdColor = Color3.fromRGB(230, 190, 120),
-        ShowTracers = false,
-        TracerColor = Color3.fromRGB(255, 215, 0),
-        TracerThickness = 1,
         WhitelistHighlight = {
             Enabled = true,
             FillColor = Color3.fromRGB(0, 255, 0),
@@ -143,15 +237,11 @@ local Config = {
         },
     },
     Whitelist = {},
-    NoShadows = { Enabled = false },
     Spectate = { AutoSwitchOnDeath = true },
     Freecam = { Enabled = false, Speed = 1.0, Sensitivity = 0.0025 },
     Font = "Silkscreen",
 }
 
--- ============================================================
---  FONTS
--- ============================================================
 local FONT_OPTIONS = {
     Ubuntu = Enum.Font.Ubuntu, Calibri = Enum.Font.Gotham,
     ComicSans = Enum.Font.Cartoon, Silkscreen = Enum.Font.Arcade,
@@ -166,9 +256,6 @@ local function applyFont()
     for _, el in ipairs(FontRefs) do pcall(function() el.Font = f end) end
 end
 
--- ============================================================
---  THEME
--- ============================================================
 local DEFAULT_THEME = {
     Background = Color3.fromRGB(10, 8, 14),
     Panel = Color3.fromRGB(45, 35, 15),
@@ -203,11 +290,8 @@ local function applyTheme()
     syncAll()
 end
 
--- ============================================================
---  CHANGELOG POPUP
--- ============================================================
 local clGui = Instance.new("ScreenGui")
-clGui.Name = "SpyToolChangelog"
+clGui.Name = "VagrantChangelog"
 clGui.ResetOnSpawn = false
 clGui.IgnoreGuiInset = true
 clGui.DisplayOrder = 101
@@ -226,8 +310,8 @@ clBackdrop.ZIndex = 1
 clBackdrop.Parent = clGui
 
 local clCard = Instance.new("Frame")
-clCard.Size = UDim2.new(0, 440, 0, 300)
-clCard.Position = UDim2.new(0.5, -220, 0.5, -150)
+clCard.Size = UDim2.new(0, 460, 0, 300)
+clCard.Position = UDim2.new(0.5, -230, 0.5, -150)
 clCard.BorderSizePixel = 0
 clCard.Active = true
 clCard.ZIndex = 2
@@ -247,7 +331,7 @@ local cltbc = Instance.new("UICorner"); cltbc.CornerRadius = UDim.new(0, 10); cl
 
 local clTitle = Instance.new("TextLabel")
 clTitle.Size = UDim2.new(1, -50, 1, 0); clTitle.Position = UDim2.new(0, 12, 0, 0)
-clTitle.BackgroundTransparency = 1; clTitle.Text = "Spy tool — Changelog"
+clTitle.BackgroundTransparency = 1; clTitle.Text = "Changelog"
 clTitle.TextSize = 13; clTitle.TextXAlignment = Enum.TextXAlignment.Left
 clTitle.ZIndex = 4
 clTitle.Parent = clTitleBar
@@ -269,9 +353,9 @@ local clc = Instance.new("UICorner"); clc.CornerRadius = UDim.new(0, 4); clc.Par
 local clBody = Instance.new("TextLabel")
 clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 42)
 clBody.BackgroundTransparency = 1
-clBody.Text = "Spy tool — Features:\n• ESP (Highlight OFF by default)\n• Spectate\n• Freecam\n• No Shadows\n• Distance display replaced with Player ID"
+clBody.Text = "Freecam + ESP + Spectate build.\n• ESP (Highlight OFF by default, shows Player ID)\n• Spectate\n• Freecam"
 clBody.TextColor3 = Theme.Text
-clBody.TextSize = 13
+clBody.TextSize = 12
 clBody.TextWrapped = true
 clBody.TextXAlignment = Enum.TextXAlignment.Left
 clBody.TextYAlignment = Enum.TextYAlignment.Top
@@ -292,483 +376,11 @@ UserInputService.InputBegan:Connect(function(input, gp)
     if input.KeyCode == Enum.KeyCode.Escape and clGui.Enabled then closeChangelog() end
 end)
 
--- ============================================================
---  COLOR PICKER POPUP
--- ============================================================
-local cpGui = Instance.new("ScreenGui")
-cpGui.Name = "SpyToolColorPicker"
-cpGui.ResetOnSpawn = false
-cpGui.IgnoreGuiInset = true
-cpGui.DisplayOrder = 100
-cpGui.Enabled = false
-cpGui.Parent = guiParent
-
-local cpBackdrop = Instance.new("TextButton")
-cpBackdrop.Size = UDim2.new(1, 0, 1, 0)
-cpBackdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-cpBackdrop.BackgroundTransparency = 0.4
-cpBackdrop.BorderSizePixel = 0
-cpBackdrop.Text = ""
-cpBackdrop.AutoButtonColor = false
-cpBackdrop.Parent = cpGui
-
-local cpCard = Instance.new("Frame")
-cpCard.Size = UDim2.new(0, 320, 0, 500)
-cpCard.Position = UDim2.new(0.5, -160, 0.5, -250)
-cpCard.BorderSizePixel = 0
-cpCard.Active = true
-cpCard.Parent = cpGui
-addPanel(cpCard)
-local cpCorner = Instance.new("UICorner"); cpCorner.CornerRadius = UDim.new(0, 10); cpCorner.Parent = cpCard
-local cpStroke = Instance.new("UIStroke"); cpStroke.Thickness = 1.5; cpStroke.Parent = cpCard
-addStroke(cpStroke)
-
-local cpTitleBar = Instance.new("Frame")
-cpTitleBar.Size = UDim2.new(1, 0, 0, 34)
-cpTitleBar.BorderSizePixel = 0
-cpTitleBar.Parent = cpCard
-addBg(cpTitleBar)
-local cpTBc = Instance.new("UICorner"); cpTBc.CornerRadius = UDim.new(0, 10); cpTBc.Parent = cpTitleBar
-
-local cpTitle = Instance.new("TextLabel")
-cpTitle.Size = UDim2.new(1, -30, 1, 0); cpTitle.Position = UDim2.new(0, 12, 0, 0)
-cpTitle.BackgroundTransparency = 1; cpTitle.Text = "Color Picker"
-cpTitle.TextSize = 13
-cpTitle.TextXAlignment = Enum.TextXAlignment.Left
-cpTitle.Parent = cpTitleBar
-addText(cpTitle); addFont(cpTitle)
-
-local cpCloseBtn = Instance.new("TextButton")
-cpCloseBtn.Size = UDim2.new(0, 22, 0, 22); cpCloseBtn.Position = UDim2.new(1, -26, 0, 6)
-cpCloseBtn.BorderSizePixel = 0
-cpCloseBtn.Text = "X"; cpCloseBtn.TextColor3 = Color3.fromRGB(255, 200, 200)
-cpCloseBtn.TextSize = 12; cpCloseBtn.AutoButtonColor = true
-cpCloseBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
-cpCloseBtn.Parent = cpTitleBar
-addFont(cpCloseBtn)
-local cpCloseC = Instance.new("UICorner"); cpCloseC.CornerRadius = UDim.new(0, 4); cpCloseC.Parent = cpCloseBtn
-
-local wheelSize = 170
-local wheelContainer = Instance.new("Frame")
-wheelContainer.Size = UDim2.new(0, wheelSize, 0, wheelSize)
-wheelContainer.Position = UDim2.new(0.5, -wheelSize/2, 0, 44)
-wheelContainer.BackgroundTransparency = 1
-wheelContainer.Parent = cpCard
-
-local wheelImage = Instance.new("ImageLabel")
-wheelImage.Size = UDim2.new(1, 0, 1, 0)
-wheelImage.BackgroundColor3 = Color3.fromRGB(45, 35, 15)
-wheelImage.BorderSizePixel = 0
-wheelImage.Image = "rbxassetid://4745310317"
-wheelImage.Parent = wheelContainer
-local wic = Instance.new("UICorner"); wic.CornerRadius = UDim.new(1, 0); wic.Parent = wheelImage
-
-local wheelButton = Instance.new("TextButton")
-wheelButton.Size = UDim2.new(1, 0, 1, 0)
-wheelButton.BackgroundTransparency = 1
-wheelButton.Text = ""
-wheelButton.AutoButtonColor = false
-wheelButton.Parent = wheelContainer
-
-local wheelCursor = Instance.new("Frame")
-wheelCursor.Size = UDim2.new(0, 14, 0, 14)
-wheelCursor.AnchorPoint = Vector2.new(0.5, 0.5)
-wheelCursor.BorderSizePixel = 0
-wheelCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-wheelCursor.ZIndex = 5
-wheelCursor.Parent = wheelContainer
-local wcc = Instance.new("UICorner"); wcc.CornerRadius = UDim.new(1, 0); wcc.Parent = wheelCursor
-local wcs = Instance.new("UIStroke"); wcs.Color = Color3.fromRGB(0, 0, 0); wcs.Thickness = 1.5; wcs.Parent = wheelCursor
-
-local valueRow = Instance.new("Frame")
-valueRow.Size = UDim2.new(1, -24, 0, 24)
-valueRow.Position = UDim2.new(0, 12, 0, wheelSize + 52)
-valueRow.BackgroundTransparency = 1
-valueRow.Parent = cpCard
-
-local valueLbl = Instance.new("TextLabel")
-valueLbl.Size = UDim2.new(0, 50, 1, 0)
-valueLbl.BackgroundTransparency = 1; valueLbl.Text = "Value"
-valueLbl.TextSize = 11
-valueLbl.TextXAlignment = Enum.TextXAlignment.Left
-valueLbl.Parent = valueRow
-addText(valueLbl); addFont(valueLbl)
-
-local valueBar = Instance.new("TextButton")
-valueBar.Size = UDim2.new(1, -110, 0, 8)
-valueBar.Position = UDim2.new(0, 50, 0, 8)
-valueBar.BorderSizePixel = 0
-valueBar.Text = ""; valueBar.AutoButtonColor = false
-valueBar.Parent = valueRow
-addBtn(valueBar)
-local vbc = Instance.new("UICorner"); vbc.CornerRadius = UDim.new(1, 0); vbc.Parent = valueBar
-
-local valueFill = Instance.new("Frame")
-valueFill.Size = UDim2.new(1, 0, 1, 0)
-valueFill.BorderSizePixel = 0; valueFill.Parent = valueBar
-addAccent(valueFill)
-local vfc = Instance.new("UICorner"); vfc.CornerRadius = UDim.new(1, 0); vfc.Parent = valueFill
-
-local valueVal = Instance.new("TextLabel")
-valueVal.Size = UDim2.new(0, 50, 1, 0); valueVal.Position = UDim2.new(1, -50, 0, 0)
-valueVal.BackgroundTransparency = 1; valueVal.Text = "100"
-valueVal.TextSize = 11
-valueVal.TextXAlignment = Enum.TextXAlignment.Right
-valueVal.Parent = valueRow
-addText(valueVal); addFont(valueVal)
-
-local rgbFrame = Instance.new("Frame")
-rgbFrame.Size = UDim2.new(1, -24, 0, 80)
-rgbFrame.Position = UDim2.new(0, 12, 0, wheelSize + 82)
-rgbFrame.BackgroundTransparency = 1
-rgbFrame.Parent = cpCard
-
-local rgbSliders = {}
-
-local function makeRGBSlider(parent, channel, y)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 24); row.Position = UDim2.new(0, 0, 0, y)
-    row.BackgroundTransparency = 1; row.Parent = parent
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(0, 20, 1, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = channel
-    lbl.TextSize = 11; lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = row
-    addText(lbl); addFont(lbl)
-
-    local bar = Instance.new("TextButton")
-    bar.Size = UDim2.new(1, -80, 0, 8); bar.Position = UDim2.new(0, 20, 0, 8)
-    bar.BorderSizePixel = 0; bar.Text = ""; bar.AutoButtonColor = false
-    bar.Parent = row
-    addBtn(bar)
-    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(1, 0); bc.Parent = bar
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(1, 0, 1, 0); fill.BorderSizePixel = 0; fill.Parent = bar
-    addAccent(fill)
-    local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1, 0); fc.Parent = fill
-
-    local val = Instance.new("TextLabel")
-    val.Size = UDim2.new(0, 50, 1, 0); val.Position = UDim2.new(1, -50, 0, 0)
-    val.BackgroundTransparency = 1; val.Text = "0"
-    val.TextSize = 11; val.TextXAlignment = Enum.TextXAlignment.Right
-    val.Parent = row
-    addText(val); addFont(val)
-
-    rgbSliders[channel] = {bar = bar, fill = fill, val = val}
-end
-
-makeRGBSlider(rgbFrame, "R", 0)
-makeRGBSlider(rgbFrame, "G", 28)
-makeRGBSlider(rgbFrame, "B", 56)
-
-local hexRow = Instance.new("Frame")
-hexRow.Size = UDim2.new(1, -24, 0, 30)
-hexRow.Position = UDim2.new(0, 12, 0, wheelSize + 170)
-hexRow.BackgroundTransparency = 1
-hexRow.Parent = cpCard
-
-local hexLbl = Instance.new("TextLabel")
-hexLbl.Size = UDim2.new(0, 36, 1, 0)
-hexLbl.BackgroundTransparency = 1; hexLbl.Text = "Hex"
-hexLbl.TextSize = 11; hexLbl.TextXAlignment = Enum.TextXAlignment.Left
-hexLbl.Parent = hexRow
-addText(hexLbl); addFont(hexLbl)
-
-local hexBox = Instance.new("TextBox")
-hexBox.Size = UDim2.new(1, -36, 1, 0); hexBox.Position = UDim2.new(0, 36, 0, 0)
-hexBox.BackgroundColor3 = Theme.Background; hexBox.BorderSizePixel = 0
-hexBox.Text = "#FFFFFF"; hexBox.TextColor3 = Theme.Text; hexBox.TextSize = 11
-hexBox.ClearTextOnFocus = false; hexBox.TextXAlignment = Enum.TextXAlignment.Left
-hexBox.Parent = hexRow
-addFont(hexBox)
-local hbc = Instance.new("UICorner"); hbc.CornerRadius = UDim.new(0, 4); hbc.Parent = hexBox
-local hbp = Instance.new("UIPadding"); hbp.PaddingLeft = UDim.new(0, 6); hbp.PaddingRight = UDim.new(0, 6); hbp.Parent = hexBox
-
-local previewRow = Instance.new("Frame")
-previewRow.Size = UDim2.new(1, -24, 0, 36)
-previewRow.Position = UDim2.new(0, 12, 0, wheelSize + 208)
-previewRow.BackgroundTransparency = 1
-previewRow.Parent = cpCard
-
-local cpPreview = Instance.new("Frame")
-cpPreview.Size = UDim2.new(1, 0, 1, 0); cpPreview.BorderSizePixel = 0; cpPreview.Parent = previewRow
-local cpc = Instance.new("UICorner"); cpc.CornerRadius = UDim.new(0, 6); cpc.Parent = cpPreview
-local cps = Instance.new("UIStroke"); cps.Thickness = 1; cps.Parent = cpPreview
-addStroke(cps)
-
-local cpPreviewText = Instance.new("TextLabel")
-cpPreviewText.Size = UDim2.new(1, 0, 1, 0); cpPreviewText.BackgroundTransparency = 1
-cpPreviewText.Text = "#FFFFFF"; cpPreviewText.TextSize = 13
-cpPreviewText.TextColor3 = Color3.fromRGB(255, 255, 255)
-cpPreviewText.TextStrokeTransparency = 0
-cpPreviewText.Font = Enum.Font.GothamBold
-cpPreviewText.Parent = cpPreview
-
-local btnRow = Instance.new("Frame")
-btnRow.Size = UDim2.new(1, -24, 0, 32); btnRow.Position = UDim2.new(0, 12, 0, wheelSize + 252)
-btnRow.BackgroundTransparency = 1; btnRow.Parent = cpCard
-local btnRowLayout = Instance.new("UIListLayout")
-btnRowLayout.FillDirection = Enum.FillDirection.Horizontal
-btnRowLayout.Padding = UDim.new(0, 8); btnRowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-btnRowLayout.Parent = btnRow
-
-local cpCancelBtn = Instance.new("TextButton")
-cpCancelBtn.Size = UDim2.new(0.5, -4, 1, 0); cpCancelBtn.BorderSizePixel = 0
-cpCancelBtn.Text = "Cancel"; cpCancelBtn.TextSize = 12; cpCancelBtn.AutoButtonColor = true
-cpCancelBtn.Parent = btnRow
-addBtn(cpCancelBtn); addText(cpCancelBtn); addFont(cpCancelBtn)
-local ccc = Instance.new("UICorner"); ccc.CornerRadius = UDim.new(0, 6); ccc.Parent = cpCancelBtn
-
-local cpApplyBtn = Instance.new("TextButton")
-cpApplyBtn.Size = UDim2.new(0.5, -4, 1, 0); cpApplyBtn.BorderSizePixel = 0
-cpApplyBtn.Text = "Apply"; cpApplyBtn.TextSize = 12; cpApplyBtn.AutoButtonColor = true
-cpApplyBtn.Parent = btnRow
-addAccent(cpApplyBtn)
-cpApplyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-addFont(cpApplyBtn)
-local cac = Instance.new("UICorner"); cac.CornerRadius = UDim.new(0, 6); cac.Parent = cpApplyBtn
-
-local cps_state = {
-    hue = 0, sat = 1, val = 1,
-    currentColor = Color3.new(1, 1, 1),
-    originalColor = Color3.new(1, 1, 1),
-    onLiveChange = nil,
-}
-
-local function toHex(col)
-    return string.format("#%02X%02X%02X",
-        math.floor(col.R * 255 + 0.5), math.floor(col.G * 255 + 0.5), math.floor(col.B * 255 + 0.5))
-end
-
-local function fromHex(s)
-    s = s:gsub("#", "")
-    if #s ~= 6 then return nil end
-    local r, g, b = tonumber(s:sub(1, 2), 16), tonumber(s:sub(3, 4), 16), tonumber(s:sub(5, 6), 16)
-    if r and g and b then return Color3.fromRGB(r, g, b) end
-    return nil
-end
-
-local function updateCursorPos()
-    local radius = wheelSize / 2
-    local angle = cps_state.hue * 2 * math.pi
-    local dist = cps_state.sat * radius
-    local x = radius + math.cos(angle) * dist
-    local y = radius + math.sin(angle) * dist
-    wheelCursor.Position = UDim2.new(0, x, 0, y)
-    wheelCursor.BackgroundColor3 = cps_state.currentColor
-end
-
-local function refreshUI()
-    cps_state.currentColor = Color3.fromHSV(cps_state.hue, cps_state.sat, cps_state.val)
-    updateCursorPos()
-    valueFill.Size = UDim2.new(cps_state.val, 0, 1, 0)
-    valueVal.Text = tostring(math.floor(cps_state.val * 100 + 0.5))
-
-    local r, g, b = cps_state.currentColor.R, cps_state.currentColor.G, cps_state.currentColor.B
-    rgbSliders["R"].fill.Size = UDim2.new(r, 0, 1, 0)
-    rgbSliders["R"].val.Text = tostring(math.floor(r * 255 + 0.5))
-    rgbSliders["G"].fill.Size = UDim2.new(g, 0, 1, 0)
-    rgbSliders["G"].val.Text = tostring(math.floor(g * 255 + 0.5))
-    rgbSliders["B"].fill.Size = UDim2.new(b, 0, 1, 0)
-    rgbSliders["B"].val.Text = tostring(math.floor(b * 255 + 0.5))
-
-    cpPreview.BackgroundColor3 = cps_state.currentColor
-    local brightness = (r + g + b) / 3
-    cpPreviewText.TextColor3 = brightness > 0.5 and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-    cpPreviewText.Text = toHex(cps_state.currentColor)
-    if not hexBox:IsFocused() then hexBox.Text = toHex(cps_state.currentColor) end
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.currentColor) end
-end
-
-local draggingWheel = false
-local function updateFromWheelInput(mx, my)
-    local abs = wheelButton.AbsolutePosition
-    local size = wheelButton.AbsoluteSize
-    local cx, cy = abs.X + size.X / 2, abs.Y + size.Y / 2
-    local dx, dy = mx - cx, my - cy
-    local radius = size.X / 2
-    local dist = math.sqrt(dx * dx + dy * dy)
-    if dist > radius then dist = radius end
-    cps_state.sat = dist / radius
-    cps_state.hue = (math.atan2(dy, dx) / (2 * math.pi)) % 1
-    refreshUI()
-end
-
-wheelButton.MouseButton1Down:Connect(function()
-    draggingWheel = true
-    local mp = UserInputService:GetMouseLocation()
-    updateFromWheelInput(mp.X, mp.Y + 36)
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingWheel and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local mp = UserInputService:GetMouseLocation()
-        updateFromWheelInput(mp.X, mp.Y + 36)
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingWheel = false end
-end)
-
-local draggingValue = false
-valueBar.MouseButton1Down:Connect(function()
-    draggingValue = true
-    local mp = UserInputService:GetMouseLocation()
-    cps_state.val = math.clamp((mp.X - valueBar.AbsolutePosition.X) / valueBar.AbsoluteSize.X, 0, 1)
-    refreshUI()
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingValue and input.UserInputType == Enum.UserInputType.MouseMovement then
-        cps_state.val = math.clamp((input.Position.X - valueBar.AbsolutePosition.X) / valueBar.AbsoluteSize.X, 0, 1)
-        refreshUI()
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingValue = false end
-end)
-
-local draggingRGB = nil
-for channel, data in pairs(rgbSliders) do
-    data.bar.MouseButton1Down:Connect(function()
-        draggingRGB = channel
-        local mp = UserInputService:GetMouseLocation()
-        local rel = math.clamp((mp.X - data.bar.AbsolutePosition.X) / data.bar.AbsoluteSize.X, 0, 1)
-        local c = cps_state.currentColor
-        local newC = Color3.new(
-            channel == "R" and rel or c.R,
-            channel == "G" and rel or c.G,
-            channel == "B" and rel or c.B)
-        local h, s, v = Color3.toHSV(newC)
-        cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-        refreshUI()
-    end)
-end
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingRGB and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local data = rgbSliders[draggingRGB]
-        local rel = math.clamp((input.Position.X - data.bar.AbsolutePosition.X) / data.bar.AbsoluteSize.X, 0, 1)
-        local c = cps_state.currentColor
-        local newC = Color3.new(
-            draggingRGB == "R" and rel or c.R,
-            draggingRGB == "G" and rel or c.G,
-            draggingRGB == "B" and rel or c.B)
-        local h, s, v = Color3.toHSV(newC)
-        cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-        refreshUI()
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingRGB = nil end
-end)
-
-hexBox.FocusLost:Connect(function()
-    local col = fromHex(hexBox.Text)
-    if col then
-        local h, s, v = Color3.toHSV(col)
-        cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-        refreshUI()
-    else
-        hexBox.Text = toHex(cps_state.currentColor)
-    end
-end)
-
-local function closePicker()
-    cpGui.Enabled = false
-    cps_state.onLiveChange = nil
-end
-
-cpCancelBtn.MouseButton1Click:Connect(function()
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-    closePicker()
-end)
-
-cpApplyBtn.MouseButton1Click:Connect(closePicker)
-
-cpCloseBtn.MouseButton1Click:Connect(function()
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-    closePicker()
-end)
-
-cpBackdrop.MouseButton1Click:Connect(function()
-    if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-    closePicker()
-end)
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.Escape and cpGui.Enabled then
-        if cps_state.onLiveChange then cps_state.onLiveChange(cps_state.originalColor) end
-        closePicker()
-    end
-end)
-
-local function openColorPicker(initialColor, onChange)
-    cps_state.originalColor = initialColor or Color3.new(1, 1, 1)
-    local h, s, v = Color3.toHSV(cps_state.originalColor)
-    cps_state.hue, cps_state.sat, cps_state.val = h, s, v
-    cps_state.onLiveChange = onChange
-    cpGui.Enabled = true
-    refreshUI()
-end
-
--- ============================================================
---  BLOCK 1: ESP (highlight OFF by default)
--- ============================================================
 local espHighlights, espBillboards = {}, {}
-local tracerLines = {}
-
-local function getOrCreateTracer(player)
-    if not tracerLines[player] then
-        local line = Drawing.new("Line")
-        line.Visible = false
-        line.Color = Config.ESP.TracerColor
-        line.Thickness = Config.ESP.TracerThickness
-        line.Transparency = 1
-        line.From = Vector2.new(0, 0); line.To = Vector2.new(0, 0)
-        tracerLines[player] = line
-    end
-    return tracerLines[player]
-end
-
-local function updateTracer(player, character, rootPart, distance)
-    local line = getOrCreateTracer(player)
-    if not Config.ESP.ShowTracers
-        or distance >= Config.ESP.MaxDistForHighlight
-        or Config.Whitelist[player.Name] then
-        line.Visible = false; return
-    end
-    local targetPos = character:FindFirstChild("Head") or rootPart
-    local sp, onScreen = Camera:WorldToViewportPoint(targetPos.Position)
-    if not onScreen or sp.Z <= 0 then line.Visible = false; return end
-    local viewport = Camera.ViewportSize
-    line.From = Vector2.new(viewport.X / 2, viewport.Y)
-    line.To = Vector2.new(sp.X, sp.Y)
-    line.Color = Config.ESP.TracerColor
-    line.Thickness = Config.ESP.TracerThickness
-    line.Transparency = 1
-    line.Visible = true
-end
-
-local function hideTracer(player)
-    local line = tracerLines[player]; if line then line.Visible = false end
-end
-
-local function destroyTracer(player)
-    local line = tracerLines[player]
-    if line then pcall(function() line:Remove() end); tracerLines[player] = nil end
-end
 
 local function cleanupESPForPlayer(player)
     if espHighlights[player] then espHighlights[player]:Destroy(); espHighlights[player] = nil end
     if espBillboards[player] then espBillboards[player]:Destroy(); espBillboards[player] = nil end
-    hideTracer(player)
 end
 
 local function colorToRichTag(c)
@@ -803,8 +415,6 @@ local function updateESP(player)
     if not humanoid or not rootPart then return end
     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
 
-    updateTracer(player, character, rootPart, distance)
-
     local isWhitelisted = Config.Whitelist[player.Name] == true
     local useWLColors = isWhitelisted and Config.ESP.WhitelistHighlight.Enabled
     local fillCol, outlineCol
@@ -819,7 +429,7 @@ local function updateESP(player)
     if Config.ESP.ShowHighlight and distance < Config.ESP.MaxDistForHighlight then
         if not espHighlights[player] or not espHighlights[player].Parent then
             local h = Instance.new("Highlight")
-            h.Name = "SpyToolESP_Highlight"; h.Adornee = character
+            h.Name = "VagrantESP_Highlight"; h.Adornee = character
             h.FillColor = fillCol; h.OutlineColor = outlineCol
             h.FillTransparency = 0.5; h.OutlineTransparency = 0
             h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -841,7 +451,7 @@ local function updateESP(player)
 
     if not espBillboards[player] or not espBillboards[player].Parent then
         local b = Instance.new("BillboardGui")
-        b.Name = "SpyToolESP_Billboard"
+        b.Name = "VagrantESP_Billboard"
         b.Adornee = character:FindFirstChild("Head") or rootPart
         b.Size = UDim2.new(0, 220, 0, 60); b.StudsOffset = Vector3.new(0, 3, 0)
         b.AlwaysOnTop = true; b.MaxDistance = math.huge
@@ -881,7 +491,7 @@ end
 
 for _, p in ipairs(Players:GetPlayers()) do setupPlayer(p) end
 Players.PlayerAdded:Connect(setupPlayer)
-Players.PlayerRemoving:Connect(function(p) cleanupESPForPlayer(p); destroyTracer(p) end)
+Players.PlayerRemoving:Connect(function(p) cleanupESPForPlayer(p) end)
 
 RunService.RenderStepped:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do
@@ -889,33 +499,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================================================
---  BLOCK 2: NO SHADOWS
--- ============================================================
-local shadowConnection = nil
-local function applyNoShadows()
-    if Config.NoShadows.Enabled then
-        Lighting.GlobalShadows = false
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then obj.CastShadow = false end
-        end
-        if not shadowConnection then
-            shadowConnection = workspace.DescendantAdded:Connect(function(d)
-                if Config.NoShadows.Enabled and d:IsA("BasePart") then d.CastShadow = false end
-            end)
-        end
-    else
-        Lighting.GlobalShadows = true
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then obj.CastShadow = true end
-        end
-    end
-end
-applyNoShadows()
-
--- ============================================================
---  BLOCK 3: SPECTATE
--- ============================================================
 local Spectate = { Enabled = false, Target = nil, PrevSubject = nil, PrevType = nil }
 
 local function getSpectateList()
@@ -991,12 +574,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ============================================================
---  BLOCK 4: FREECAM
--- ============================================================
 local PITCH_LIMIT = math.rad(89)
 
-local Freecam = {
+Freecam = {
     Active = false, Position = Vector3.new(0, 0, 0), Yaw = 0, Pitch = 0,
     Keys = {}, SavedWalkSpeed = nil, SavedJumpPower = nil,
     PrevCameraType = nil, PrevCameraSubject = nil,
@@ -1104,14 +684,11 @@ LocalPlayer.CharacterAdded:Connect(function()
     if Freecam.Active then stopFreecam() end
 end)
 
--- ============================================================
---  BLOCK 5: MENU
--- ============================================================
-local oldMenu = guiParent:FindFirstChild("SpyToolMenu")
+local oldMenu = guiParent:FindFirstChild("VagrantMenu")
 if oldMenu then oldMenu:Destroy() end
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SpyToolMenu"
+screenGui.Name = "VagrantMenu"
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1186,7 +763,7 @@ local tbCorner = Instance.new("UICorner"); tbCorner.CornerRadius = UDim.new(0, 1
 local titleLbl = Instance.new("TextLabel")
 titleLbl.Size = UDim2.new(1, -12, 0, 26); titleLbl.Position = UDim2.new(0, 12, 0, 2)
 titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "Spy tool"
+titleLbl.Text = "Vagrant Survival Best Script"
 titleLbl.TextSize = 15
 titleLbl.TextColor3 = Theme.Text
 titleLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -1197,7 +774,7 @@ table.insert(ThemeRefs.text, {el=titleLbl, p="TextColor3"})
 local subtitleLbl = Instance.new("TextLabel")
 subtitleLbl.Size = UDim2.new(1, -12, 0, 16); subtitleLbl.Position = UDim2.new(0, 12, 0, 26)
 subtitleLbl.BackgroundTransparency = 1
-subtitleLbl.Text = "ESP • Spectate • Freecam • No Shadows  •  Press F1 to close / open"
+subtitleLbl.Text = "by Dokoo2  •  Press F1 to close / open the menu"
 subtitleLbl.TextSize = 10
 subtitleLbl.TextTransparency = 0.2
 subtitleLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -1399,41 +976,6 @@ local function makeTrioBtn(parent, name, cb)
     return btn
 end
 
-local function makeColorPicker(parent, name, getter, setter)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 30); row.BorderSizePixel = 0; row.Parent = parent
-    addBtn(row)
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -104, 1, 0); lbl.Position = UDim2.new(0, 10, 0, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextSize = 11
-    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-    addText(lbl); addFont(lbl)
-
-    local preview = Instance.new("Frame")
-    preview.Size = UDim2.new(0, 22, 0, 20); preview.Position = UDim2.new(1, -96, 0, 5)
-    preview.BorderSizePixel = 0; preview.Parent = row
-    local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 4); pc.Parent = preview
-    local ps = Instance.new("UIStroke"); ps.Thickness = 1; ps.Color = Color3.fromRGB(120, 120, 120); ps.Parent = preview
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 68, 0, 20); btn.Position = UDim2.new(1, -70, 0, 5)
-    btn.BorderSizePixel = 0
-    btn.Text = "Change"; btn.TextSize = 10
-    btn.AutoButtonColor = true; btn.Parent = row
-    addBtn(btn); addText(btn); addFont(btn)
-    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = btn
-
-    registerSync(function() preview.BackgroundColor3 = getter() end)
-
-    btn.MouseButton1Click:Connect(function()
-        openColorPicker(getter(), function(col) setter(col); syncAll() end)
-    end)
-
-    return row
-end
-
 local tabNames = { "Customization", "Game", "Game Customization" }
 local tabButtons, tabFrames = {}, {}
 
@@ -1480,16 +1022,6 @@ end
 local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
-
--- ============================================================
---  TAB: CUSTOMIZATION
--- ============================================================
-makeSectionHeader(customTab, "THEME COLORS")
-makeColorPicker(customTab, "Background", function() return Theme.Background end, function(c) Theme.Background = c; applyTheme() end)
-makeColorPicker(customTab, "Buttons", function() return Theme.Button end, function(c) Theme.Button = c; applyTheme() end)
-makeColorPicker(customTab, "Outline", function() return Theme.Outline end, function(c) Theme.Outline = c; applyTheme() end)
-makeColorPicker(customTab, "Accent", function() return Theme.Accent end, function(c) Theme.Accent = c; applyTheme() end)
-makeColorPicker(customTab, "Text", function() return Theme.Text end, function(c) Theme.Text = c; applyTheme() end)
 
 makeSectionHeader(customTab, "FONT")
 
@@ -1544,9 +1076,6 @@ addBtn(changelogBtn); addText(changelogBtn); addFont(changelogBtn)
 local clbtnc = Instance.new("UICorner"); clbtnc.CornerRadius = UDim.new(0, 6); clbtnc.Parent = changelogBtn
 changelogBtn.MouseButton1Click:Connect(function() openChangelog() end)
 
--- ============================================================
---  TAB: GAME (Freecam + Spectate)
--- ============================================================
 makeSectionHeader(gameTab, "FREECAM")
 makeToggle(gameTab, "Freecam Enabled",
     function() return Config.Freecam.Enabled end,
@@ -1688,18 +1217,13 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
---  TAB: GAME CUSTOMIZATION (ESP + NoShadows + Whitelist)
--- ============================================================
 makeSectionHeader(gameCustTab, "ESP")
 makeToggle(gameCustTab, "ESP Enabled",
     function() return Config.ESP.Enabled end,
     function(v) Config.ESP.Enabled = v end)
-
 makeToggle(gameCustTab, "Show Highlight (OFF by default)",
     function() return Config.ESP.ShowHighlight end,
     function(v) Config.ESP.ShowHighlight = v end)
-
 makeSlider(gameCustTab, "Highlight distance", 50, 2000,
     function() return Config.ESP.MaxDistForHighlight end,
     function(v) Config.ESP.MaxDistForHighlight = v end, true)
@@ -1707,55 +1231,17 @@ makeSlider(gameCustTab, "Text size", 8, 32,
     function() return Config.ESP.TextSize end,
     function(v) Config.ESP.TextSize = v end, true)
 
-makeSectionHeader(gameCustTab, "ESP — ELEMENTS")
+makeSectionHeader(gameCustTab, "ESP ELEMENTS")
 makeToggle(gameCustTab, "Show Name", function() return Config.ESP.ShowName end, function(v) Config.ESP.ShowName = v end)
 makeToggle(gameCustTab, "Show HP", function() return Config.ESP.ShowHP end, function(v) Config.ESP.ShowHP = v end)
 makeToggle(gameCustTab, "Show Player ID", function() return Config.ESP.ShowPlayerId end, function(v) Config.ESP.ShowPlayerId = v end)
 
-makeSectionHeader(gameCustTab, "ESP — TRACERS")
-makeToggle(gameCustTab, "Tracers Enabled",
-    function() return Config.ESP.ShowTracers end,
-    function(v)
-        Config.ESP.ShowTracers = v
-        if not v then for player in pairs(tracerLines) do hideTracer(player) end end
-    end)
-makeSlider(gameCustTab, "Tracer thickness", 1, 5,
-    function() return Config.ESP.TracerThickness end,
-    function(v) Config.ESP.TracerThickness = v end,
-    true,
-    function(v) for _, line in pairs(tracerLines) do line.Thickness = v end end)
-makeColorPicker(gameCustTab, "Tracer color",
-    function() return Config.ESP.TracerColor end,
-    function(c)
-        Config.ESP.TracerColor = c
-        for _, line in pairs(tracerLines) do line.Color = c end
-    end)
-
-makeSectionHeader(gameCustTab, "ESP — COLORS")
-makeColorPicker(gameCustTab, "Name color", function() return Config.ESP.NameColor end, function(c) Config.ESP.NameColor = c end)
-makeColorPicker(gameCustTab, "HP color", function() return Config.ESP.HPColor end, function(c) Config.ESP.HPColor = c end)
-makeColorPicker(gameCustTab, "Player ID color", function() return Config.ESP.PlayerIdColor end, function(c) Config.ESP.PlayerIdColor = c end)
-makeColorPicker(gameCustTab, "Highlight fill color", function() return Config.ESP.HighlightColor end, function(c) Config.ESP.HighlightColor = c end)
-makeColorPicker(gameCustTab, "Highlight outline color", function() return Config.ESP.OutlineColor end, function(c) Config.ESP.OutlineColor = c end)
-
-makeSectionHeader(gameCustTab, "WHITELIST — Different highlight / no tracers")
+makeSectionHeader(gameCustTab, "WHITELIST HIGHLIGHT")
 makeToggle(gameCustTab, "Whitelist highlight enabled",
     function() return Config.ESP.WhitelistHighlight.Enabled end,
     function(v) Config.ESP.WhitelistHighlight.Enabled = v end)
-makeColorPicker(gameCustTab, "Whitelist fill color",
-    function() return Config.ESP.WhitelistHighlight.FillColor end,
-    function(c) Config.ESP.WhitelistHighlight.FillColor = c end)
-makeColorPicker(gameCustTab, "Whitelist outline color",
-    function() return Config.ESP.WhitelistHighlight.OutlineColor end,
-    function(c) Config.ESP.WhitelistHighlight.OutlineColor = c end)
 
-makeSectionHeader(gameCustTab, "VISUAL")
-makeToggle(gameCustTab, "No Shadows",
-    function() return Config.NoShadows.Enabled end,
-    function(v) Config.NoShadows.Enabled = v end,
-    function() applyNoShadows() end)
-
-makeSectionHeader(gameCustTab, "WHITELIST — Add / Remove")
+makeSectionHeader(gameCustTab, "WHITELIST — Aimbot ignores these players")
 
 local wlListFrame
 local refreshWhitelistUI
@@ -1863,7 +1349,6 @@ end)
 
 refreshWhitelistUI()
 
--- F1 — TOGGLE
 local menuOpen = true
 local function setMenuOpen(state) menuOpen = state; main.Visible = state end
 
@@ -1877,5 +1362,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == Enum.KeyCode.F1 then setMenuOpen(not menuOpen) end
 end)
 
-print("[Spy tool] Loaded. F1 to toggle menu.")
-print("Features: ESP (highlight OFF by default, shows Player ID), Spectate, Freecam, No Shadows.")
+print("[Vagrant Survival Best Script by Dokoo2] Loaded. F1 to toggle menu.")
+
+showNotification("Vagrant Survival", "Script successfully loaded", 5, false)
