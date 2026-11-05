@@ -17,6 +17,7 @@ local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
 local guiParent
 if type(gethui) == "function" then
@@ -105,6 +106,62 @@ local function showSplash()
 end
 
 showSplash()
+
+local VAGRANT_PLACE_ID = 100283815455755
+
+local function showWrongGameError()
+    local errGui = Instance.new("ScreenGui")
+    errGui.Name = "VagrantWrongGame"
+    errGui.ResetOnSpawn = false
+    errGui.IgnoreGuiInset = true
+    errGui.DisplayOrder = 2147483647
+    errGui.Parent = guiParent
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(0, 460, 0, 180)
+    card.Position = UDim2.new(0.5, -230, 0.5, -90)
+    card.BackgroundColor3 = Color3.fromRGB(30, 10, 10)
+    card.BackgroundTransparency = 0.05
+    card.BorderSizePixel = 0
+    card.Parent = errGui
+    local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 12); cc.Parent = card
+    local cs = Instance.new("UIStroke"); cs.Color = Color3.fromRGB(220, 40, 40); cs.Thickness = 2; cs.Parent = card
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -20, 0, 40)
+    titleLbl.Position = UDim2.new(0, 10, 0, 15)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = "Failed"
+    titleLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 26
+    titleLbl.Parent = card
+
+    local bodyLbl = Instance.new("TextLabel")
+    bodyLbl.Size = UDim2.new(1, -30, 0, 80)
+    bodyLbl.Position = UDim2.new(0, 15, 0, 60)
+    bodyLbl.BackgroundTransparency = 1
+    bodyLbl.Text = "Вы находитесь не в Vagrant Survival!"
+    bodyLbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+    bodyLbl.Font = Enum.Font.Gotham
+    bodyLbl.TextSize = 15
+    bodyLbl.TextWrapped = true
+    bodyLbl.TextXAlignment = Enum.TextXAlignment.Center
+    bodyLbl.TextYAlignment = Enum.TextYAlignment.Center
+    bodyLbl.Parent = card
+end
+
+if game.PlaceId ~= VAGRANT_PLACE_ID then
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Failed",
+            Text = "Вы находитесь не в Vagrant Survival!",
+            Duration = 10,
+        })
+    end)
+    showWrongGameError()
+    return
+end
 
 local _activeNotifs = {}
 
@@ -220,25 +277,28 @@ end
 local Config = {
     ESP = {
         Enabled = false,
-        ShowHighlight = false,
         MaxDistForHighlight = 500,
         HighlightColor = Color3.fromRGB(255, 215, 0),
         OutlineColor = Color3.fromRGB(255, 240, 180),
         TextColor = Color3.fromRGB(255, 230, 150),
         TextSize = 14,
-        ShowName = true, ShowHP = true, ShowPlayerId = true,
-        NameColor = Color3.fromRGB(255, 200, 80),
-        HPColor = Color3.fromRGB(255, 170, 40),
-        PlayerIdColor = Color3.fromRGB(230, 190, 120),
+        ShowName = true, ShowHP = true, ShowDistance = true,
         WhitelistHighlight = {
             Enabled = true,
             FillColor = Color3.fromRGB(0, 255, 0),
             OutlineColor = Color3.fromRGB(255, 255, 255),
         },
     },
-    Whitelist = {},
+    Aim = {
+        Enabled = false, FOVRadius = 100, Smoothness = 0.5, MaxDistance = 500,
+        MinDot = 0.1, MaxMovePerFrame = 60, AimPart = "Head",
+        VerticalBlockEnabled = true, VerticalBlockRadius = 3, VerticalBlockMinHeight = 3,
+        Whitelist = {},
+    },
+    InfiniteJump = { Enabled = false },
+    ForceSpeed = { Enabled = false, Speed = 24, SprintForce = false },
+    Cursor = { Enabled = false, ImageId = "", Size = 32, HideDefault = true },
     Spectate = { AutoSwitchOnDeath = true },
-    Freecam = { Enabled = false, Speed = 1.0, Sensitivity = 0.0025 },
     Font = "Silkscreen",
 }
 
@@ -290,6 +350,90 @@ local function applyTheme()
     syncAll()
 end
 
+local CursorCfg = Config.Cursor
+
+local function getHighestGuiParent()
+    if type(gethui) == "function" then
+        local ok, hui = pcall(gethui)
+        if ok and hui then return hui end
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local cursorGui, cursorImage
+
+local function createCursorGui()
+    if cursorGui then pcall(function() cursorGui:Destroy() end) end
+    local pg = getHighestGuiParent()
+    if pg:FindFirstChild("VagrantCursor") then pcall(function() pg.VagrantCursor:Destroy() end) end
+
+    cursorGui = Instance.new("ScreenGui")
+    cursorGui.Name = "VagrantCursor"
+    cursorGui.ResetOnSpawn = false
+    cursorGui.IgnoreGuiInset = false
+    cursorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    cursorGui.DisplayOrder = 2147483647
+    pcall(function() cursorGui.Parent = pg end)
+
+    cursorImage = Instance.new("ImageLabel")
+    cursorImage.Name = "CursorImage"
+    cursorImage.Size = UDim2.new(0, CursorCfg.Size, 0, CursorCfg.Size)
+    cursorImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    cursorImage.BackgroundTransparency = 1
+    cursorImage.ZIndex = 2147483647
+    cursorImage.Visible = false
+    cursorImage.Parent = cursorGui
+    if CursorCfg.ImageId ~= "" then cursorImage.Image = CursorCfg.ImageId end
+end
+
+createCursorGui()
+
+local function setDefaultCursorVisible(visible)
+    pcall(function() UserInputService.MouseIconEnabled = visible end)
+end
+
+local function applyCursorImage(id)
+    if not id or id == "" then
+        if cursorImage then cursorImage.Image = "" end
+        CursorCfg.ImageId = ""; return
+    end
+    local cleanId = tostring(id):gsub("%s", "")
+    local url
+    if cleanId:find("rbxassetid://") then url = cleanId
+    elseif cleanId:find("^%d+$") then url = "rbxassetid://" .. cleanId
+    else url = cleanId end
+    CursorCfg.ImageId = url
+    if cursorImage then cursorImage.Image = url end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not CursorCfg.Enabled or CursorCfg.ImageId == "" then
+        if cursorImage then cursorImage.Visible = false end
+        return
+    end
+    if not cursorImage or not cursorImage.Parent then return end
+    cursorImage.Visible = true
+    cursorImage.Position = UDim2.new(0, Mouse.X, 0, Mouse.Y)
+    cursorImage.Size = UDim2.new(0, CursorCfg.Size, 0, CursorCfg.Size)
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if CursorCfg.Enabled then
+            local pg = getHighestGuiParent()
+            if not cursorGui or not cursorGui.Parent or cursorGui.Parent ~= pg then createCursorGui() end
+            pcall(function() cursorGui.DisplayOrder = 2147483647 end)
+            if cursorImage then
+                pcall(function() cursorImage.ZIndex = 2147483647 end)
+                if cursorImage.Image ~= CursorCfg.ImageId and CursorCfg.ImageId ~= "" then cursorImage.Image = CursorCfg.ImageId end
+            end
+            if CursorCfg.HideDefault then pcall(function() UserInputService.MouseIconEnabled = false end) end
+            if cursorImage and CursorCfg.ImageId ~= "" then cursorImage.Visible = true end
+        end
+    end
+end)
+
 local clGui = Instance.new("ScreenGui")
 clGui.Name = "VagrantChangelog"
 clGui.ResetOnSpawn = false
@@ -310,8 +454,8 @@ clBackdrop.ZIndex = 1
 clBackdrop.Parent = clGui
 
 local clCard = Instance.new("Frame")
-clCard.Size = UDim2.new(0, 460, 0, 300)
-clCard.Position = UDim2.new(0.5, -230, 0.5, -150)
+clCard.Size = UDim2.new(0, 460, 0, 360)
+clCard.Position = UDim2.new(0.5, -230, 0.5, -180)
 clCard.BorderSizePixel = 0
 clCard.Active = true
 clCard.ZIndex = 2
@@ -353,7 +497,7 @@ local clc = Instance.new("UICorner"); clc.CornerRadius = UDim.new(0, 4); clc.Par
 local clBody = Instance.new("TextLabel")
 clBody.Size = UDim2.new(1, -24, 1, -50); clBody.Position = UDim2.new(0, 12, 0, 42)
 clBody.BackgroundTransparency = 1
-clBody.Text = "Freecam + ESP + Spectate build.\n• ESP (Highlight OFF by default, shows Player ID)\n• Spectate\n• Freecam"
+clBody.Text = ""
 clBody.TextColor3 = Theme.Text
 clBody.TextSize = 12
 clBody.TextWrapped = true
@@ -388,19 +532,18 @@ local function colorToRichTag(c)
         math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
 end
 
-local function buildESPLabelText(player, humanoid)
+local function buildESPLabelText(player, humanoid, distance)
     local lines = {}
     if Config.ESP.ShowName then
-        table.insert(lines, string.format('<font color="%s">%s</font>',
-            colorToRichTag(Config.ESP.NameColor), player.Name))
+        table.insert(lines, string.format('<font color="%s">%s</font>', colorToRichTag(Config.ESP.NameColor or Config.ESP.TextColor), player.Name))
     end
     if Config.ESP.ShowHP then
         table.insert(lines, string.format('<font color="%s">HP: %d/%d</font>',
-            colorToRichTag(Config.ESP.HPColor), math.floor(humanoid.Health), math.floor(humanoid.MaxHealth)))
+            colorToRichTag(Config.ESP.HPColor or Config.ESP.TextColor), math.floor(humanoid.Health), math.floor(humanoid.MaxHealth)))
     end
-    if Config.ESP.ShowPlayerId then
-        table.insert(lines, string.format('<font color="%s">ID: %d</font>',
-            colorToRichTag(Config.ESP.PlayerIdColor), player.UserId))
+    if Config.ESP.ShowDistance then
+        table.insert(lines, string.format('<font color="%s">Distance: %d studs</font>',
+            colorToRichTag(Config.ESP.DistanceColor or Config.ESP.TextColor), math.floor(distance)))
     end
     return table.concat(lines, "\n")
 end
@@ -415,7 +558,7 @@ local function updateESP(player)
     if not humanoid or not rootPart then return end
     local distance = (rootPart.Position - Camera.CFrame.Position).Magnitude
 
-    local isWhitelisted = Config.Whitelist[player.Name] == true
+    local isWhitelisted = Config.Aim.Whitelist[player.Name] == true
     local useWLColors = isWhitelisted and Config.ESP.WhitelistHighlight.Enabled
     local fillCol, outlineCol
     if useWLColors then
@@ -426,7 +569,7 @@ local function updateESP(player)
         outlineCol = Config.ESP.OutlineColor
     end
 
-    if Config.ESP.ShowHighlight and distance < Config.ESP.MaxDistForHighlight then
+    if distance < Config.ESP.MaxDistForHighlight then
         if not espHighlights[player] or not espHighlights[player].Parent then
             local h = Instance.new("Highlight")
             h.Name = "VagrantESP_Highlight"; h.Adornee = character
@@ -443,7 +586,7 @@ local function updateESP(player)
         if espHighlights[player] then espHighlights[player]:Destroy(); espHighlights[player] = nil end
     end
 
-    local anyText = Config.ESP.ShowName or Config.ESP.ShowHP or Config.ESP.ShowPlayerId
+    local anyText = Config.ESP.ShowName or Config.ESP.ShowHP or Config.ESP.ShowDistance
     if not anyText then
         if espBillboards[player] then espBillboards[player]:Destroy(); espBillboards[player] = nil end
         return
@@ -453,7 +596,7 @@ local function updateESP(player)
         local b = Instance.new("BillboardGui")
         b.Name = "VagrantESP_Billboard"
         b.Adornee = character:FindFirstChild("Head") or rootPart
-        b.Size = UDim2.new(0, 220, 0, 60); b.StudsOffset = Vector3.new(0, 3, 0)
+        b.Size = UDim2.new(0, 200, 0, 60); b.StudsOffset = Vector3.new(0, 3, 0)
         b.AlwaysOnTop = true; b.MaxDistance = math.huge
         local l = Instance.new("TextLabel")
         l.Name = "ESP_Label"; l.Size = UDim2.new(1, 0, 1, 0)
@@ -477,7 +620,7 @@ local function updateESP(player)
         if l then
             l.TextSize = Config.ESP.TextSize
             l.RichText = true
-            l.Text = buildESPLabelText(player, humanoid)
+            l.Text = buildESPLabelText(player, humanoid, distance)
         end
         b.Adornee = character:FindFirstChild("Head") or rootPart
     end
@@ -497,6 +640,214 @@ RunService.RenderStepped:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then updateESP(p) end
     end
+end)
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Radius = Config.Aim.FOVRadius; fovCircle.Thickness = 0
+fovCircle.Transparency = 0; fovCircle.Filled = false
+fovCircle.Visible = false; fovCircle.NumSides = 60
+
+local function getAimPart(character)
+    if Config.Aim.AimPart == "Head" then
+        return character:FindFirstChild("Head")
+            or character:FindFirstChild("UpperTorso")
+            or character:FindFirstChild("Torso")
+            or character:FindFirstChild("HumanoidRootPart")
+    else
+        return character:FindFirstChild("UpperTorso")
+            or character:FindFirstChild("Torso")
+            or character:FindFirstChild("LowerTorso")
+            or character:FindFirstChild("HumanoidRootPart")
+    end
+end
+
+local function getScreenPoint(part)
+    local sp, on = Camera:WorldToViewportPoint(part.Position)
+    if not on or sp.Z <= 0 then return nil end
+    return Vector2.new(sp.X, sp.Y)
+end
+
+local function isTargetDirectlyAboveOrBelow()
+    if not Config.Aim.VerticalBlockEnabled then return false end
+    local myChar = LocalPlayer.Character
+    if not myChar then return false end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return false end
+    local myPos = myRoot.Position
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
+        local char = player.Character
+        if not char or not char.Parent then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not hum or not root or hum.Health <= 0 then continue end
+        local pos = root.Position
+        local dx, dz = pos.X - myPos.X, pos.Z - myPos.Z
+        local horizontalDist = math.sqrt(dx * dx + dz * dz)
+        local verticalDist = math.abs(pos.Y - myPos.Y)
+        if horizontalDist < Config.Aim.VerticalBlockRadius and verticalDist > Config.Aim.VerticalBlockMinHeight then
+            return true
+        end
+    end
+    return false
+end
+
+local function collectPlayerTargets()
+    local list = {}
+    local cameraPos = Camera.CFrame.Position
+    local cameraLook = Camera.CFrame.LookVector
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer or Config.Aim.Whitelist[player.Name] then continue end
+        local character = player.Character
+        if not character or not character.Parent then continue end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        local bodyPart = getAimPart(character)
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not humanoid or not bodyPart or not rootPart then continue end
+        if humanoid.Health <= 0 then continue end
+        local worldDist = (rootPart.Position - cameraPos).Magnitude
+        if worldDist > Config.Aim.MaxDistance then continue end
+        local dirUnit = (bodyPart.Position - cameraPos).Unit
+        if cameraLook:Dot(dirUnit) < Config.Aim.MinDot then continue end
+        table.insert(list, { part = bodyPart, model = character })
+    end
+    return list
+end
+
+local function getClosestTargetToCursor()
+    local closest, shortDist = nil, Config.Aim.FOVRadius
+    local mousePos = UserInputService:GetMouseLocation()
+
+    local candidates = collectPlayerTargets()
+
+    for _, t in ipairs(candidates) do
+        local screenPos = getScreenPoint(t.part)
+        if screenPos then
+            local d = (screenPos - mousePos).Magnitude
+            if d < shortDist then
+                shortDist = d
+                closest = t
+            end
+        end
+    end
+    return closest
+end
+
+local hasMouseMoveRel = type(mousemoverel) == "function"
+
+RunService.RenderStepped:Connect(function()
+    if not Config.Aim.Enabled or not hasMouseMoveRel then return end
+    if isTargetDirectlyAboveOrBelow() then return end
+    local target = getClosestTargetToCursor()
+    if not target then return end
+    local bodyPart = target.part
+    if not bodyPart or not bodyPart.Parent then return end
+    local screenPos = getScreenPoint(bodyPart)
+    if not screenPos then return end
+    local mousePos = UserInputService:GetMouseLocation()
+    local dx, dy = screenPos.X - mousePos.X, screenPos.Y - mousePos.Y
+    if math.abs(dx) < 1 and math.abs(dy) < 1 then return end
+    local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
+    local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
+    mousemoverel(mx, my)
+end)
+
+local function performJump()
+    if not Config.InfiniteJump.Enabled then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+end
+
+UserInputService.JumpRequest:Connect(function()
+    if Config.InfiniteJump.Enabled then performJump() end
+end)
+
+local ForceSpeed = { Part = nil, Weld = nil, BodyVel = nil, Conn = nil }
+
+local function getHRP()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function cleanupForceSpeed()
+    if ForceSpeed.BodyVel then pcall(function() ForceSpeed.BodyVel:Destroy() end); ForceSpeed.BodyVel = nil end
+    if ForceSpeed.Weld then pcall(function() ForceSpeed.Weld:Destroy() end); ForceSpeed.Weld = nil end
+    if ForceSpeed.Part then pcall(function() ForceSpeed.Part:Destroy() end); ForceSpeed.Part = nil end
+end
+
+local function setupForceSpeed()
+    cleanupForceSpeed()
+    local hrp = getHRP()
+    if not hrp then return end
+    local part = Instance.new("Part")
+    part.Name = "VagrantForceSpeed"
+    part.Size = Vector3.new(0.1, 0.1, 0.1)
+    part.Transparency = 1
+    part.CanCollide = false
+    part.CanTouch = false
+    part.CanQuery = false
+    part.Massless = true
+    part.Anchored = false
+    part.Parent = hrp.Parent
+    local weld = Instance.new("Weld")
+    weld.Part0 = hrp; weld.Part1 = part; weld.Parent = part
+    local bodyVel = Instance.new("BodyVelocity")
+    bodyVel.MaxForce = Vector3.new(1e5, 0, 1e5)
+    bodyVel.Velocity = Vector3.zero
+    bodyVel.Parent = part
+    ForceSpeed.Part = part; ForceSpeed.Weld = weld; ForceSpeed.BodyVel = bodyVel
+end
+
+local function setForceSpeedEnabled(enabled)
+    Config.ForceSpeed.Enabled = enabled
+    if enabled then
+        setupForceSpeed()
+        if not ForceSpeed.Conn then
+            ForceSpeed.Conn = RunService.Heartbeat:Connect(function()
+                if not Config.ForceSpeed.Enabled then cleanupForceSpeed(); return end
+                if not (ForceSpeed.BodyVel and ForceSpeed.BodyVel.Parent and ForceSpeed.Part and ForceSpeed.Part.Parent) then setupForceSpeed() end
+                local hum = getHumanoid()
+                if not hum or hum.Health <= 0 then
+                    if ForceSpeed.BodyVel then ForceSpeed.BodyVel.Velocity = Vector3.zero end
+                    return
+                end
+                local moveDir = hum.MoveDirection
+                if moveDir.Magnitude > 0.1 then
+                    local dir = Vector3.new(moveDir.X, 0, moveDir.Z)
+                    if dir.Magnitude > 0 then
+                        local maxSpeed = Config.ForceSpeed.SprintForce and 27 or 35
+                        local baseSpeed = math.clamp(Config.ForceSpeed.Speed, 16, maxSpeed)
+                        local speed = baseSpeed
+                        if Config.ForceSpeed.SprintForce and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                            speed = math.min(35, baseSpeed + 8)
+                        end
+                        ForceSpeed.BodyVel.Velocity = dir.Unit * speed
+                    else
+                        ForceSpeed.BodyVel.Velocity = Vector3.zero
+                    end
+                else
+                    ForceSpeed.BodyVel.Velocity = Vector3.zero
+                end
+            end)
+        end
+    else
+        if ForceSpeed.Conn then pcall(function() ForceSpeed.Conn:Disconnect() end); ForceSpeed.Conn = nil end
+        cleanupForceSpeed()
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    cleanupForceSpeed()
+    if Config.ForceSpeed.Enabled then setupForceSpeed() end
 end)
 
 local Spectate = { Enabled = false, Target = nil, PrevSubject = nil, PrevType = nil }
@@ -522,9 +873,6 @@ local function setSpectateTarget(player)
     if not Spectate.Enabled then
         Spectate.PrevSubject = Camera.CameraSubject
         Spectate.PrevType = Camera.CameraType
-    end
-    if Freecam and Freecam.Active then
-        stopFreecam(); Config.Freecam.Enabled = false; syncAll()
     end
     Spectate.Enabled = true; Spectate.Target = player
     Camera.CameraSubject = hum; Camera.CameraType = Enum.CameraType.Custom
@@ -572,116 +920,6 @@ RunService.RenderStepped:Connect(function()
     else
         Camera.CameraSubject = hum
     end
-end)
-
-local PITCH_LIMIT = math.rad(89)
-
-Freecam = {
-    Active = false, Position = Vector3.new(0, 0, 0), Yaw = 0, Pitch = 0,
-    Keys = {}, SavedWalkSpeed = nil, SavedJumpPower = nil,
-    PrevCameraType = nil, PrevCameraSubject = nil,
-}
-
-local TRACKED_KEYS = {
-    [Enum.KeyCode.W] = true, [Enum.KeyCode.A] = true,
-    [Enum.KeyCode.S] = true, [Enum.KeyCode.D] = true,
-    [Enum.KeyCode.Space] = true, [Enum.KeyCode.LeftControl] = true,
-    [Enum.KeyCode.LeftShift] = true,
-}
-
-local function freezeLocalCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    Freecam.SavedWalkSpeed = hum.WalkSpeed
-    Freecam.SavedJumpPower = hum.JumpPower
-    hum.WalkSpeed = 0; hum.JumpPower = 0
-end
-
-local function unfreezeLocalCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    if Freecam.SavedWalkSpeed then hum.WalkSpeed = Freecam.SavedWalkSpeed end
-    if Freecam.SavedJumpPower then hum.JumpPower = Freecam.SavedJumpPower end
-    Freecam.SavedWalkSpeed = nil; Freecam.SavedJumpPower = nil
-end
-
-function startFreecam()
-    if Freecam.Active then return end
-    if Spectate.Enabled then stopSpectate() end
-    Freecam.Active = true
-    Freecam.PrevCameraType = Camera.CameraType
-    Freecam.PrevCameraSubject = Camera.CameraSubject
-    Freecam.Position = Camera.CFrame.Position
-    local look = Camera.CFrame.LookVector
-    Freecam.Pitch = math.asin(math.clamp(look.Y, -1, 1))
-    Freecam.Yaw = math.atan2(-look.X, -look.Z)
-    Camera.CameraType = Enum.CameraType.Scriptable
-    Camera.CFrame = CFrame.new(Freecam.Position) * CFrame.fromEulerAnglesYXZ(Freecam.Pitch, Freecam.Yaw, 0)
-    freezeLocalCharacter()
-end
-
-function stopFreecam()
-    if not Freecam.Active then return end
-    Freecam.Active = false
-    unfreezeLocalCharacter()
-    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        Camera.CameraType = Enum.CameraType.Custom
-        Camera.CameraSubject = hum
-    elseif Freecam.PrevCameraSubject and Freecam.PrevCameraSubject.Parent then
-        Camera.CameraSubject = Freecam.PrevCameraSubject
-        Camera.CameraType = Freecam.PrevCameraType or Enum.CameraType.Custom
-    end
-    for k in pairs(Freecam.Keys) do Freecam.Keys[k] = false end
-end
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if TRACKED_KEYS[input.KeyCode] and Freecam.Active then Freecam.Keys[input.KeyCode] = true end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if TRACKED_KEYS[input.KeyCode] then Freecam.Keys[input.KeyCode] = false end
-end)
-
-RunService.RenderStepped:Connect(function(dt)
-    if not Freecam.Active then return end
-    local rmbHeld = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    if rmbHeld then
-        if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
-            UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-        end
-        local delta = UserInputService:GetMouseDelta()
-        local sens = Config.Freecam.Sensitivity
-        Freecam.Yaw = Freecam.Yaw - delta.X * sens
-        Freecam.Pitch = math.clamp(Freecam.Pitch - delta.Y * sens, -PITCH_LIMIT, PITCH_LIMIT)
-    else
-        if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        end
-    end
-    local rotCF = CFrame.fromEulerAnglesYXZ(Freecam.Pitch, Freecam.Yaw, 0)
-    local move = Vector3.new()
-    if Freecam.Keys[Enum.KeyCode.W] then move = move + rotCF.LookVector end
-    if Freecam.Keys[Enum.KeyCode.S] then move = move - rotCF.LookVector end
-    if Freecam.Keys[Enum.KeyCode.D] then move = move + rotCF.RightVector end
-    if Freecam.Keys[Enum.KeyCode.A] then move = move - rotCF.RightVector end
-    if Freecam.Keys[Enum.KeyCode.Space] then move = move + Vector3.new(0, 1, 0) end
-    if Freecam.Keys[Enum.KeyCode.LeftControl] then move = move - Vector3.new(0, 1, 0) end
-    if move.Magnitude > 0 then
-        local speed = 60 * Config.Freecam.Speed
-        if Freecam.Keys[Enum.KeyCode.LeftShift] then speed = speed * 3 end
-        Freecam.Position = Freecam.Position + move.Unit * speed * dt
-    end
-    Camera.CFrame = CFrame.new(Freecam.Position) * rotCF
-end)
-
-LocalPlayer.CharacterAdded:Connect(function()
-    if Freecam.Active then stopFreecam() end
 end)
 
 local oldMenu = guiParent:FindFirstChild("VagrantMenu")
@@ -976,7 +1214,19 @@ local function makeTrioBtn(parent, name, cb)
     return btn
 end
 
-local tabNames = { "Customization", "Game", "Game Customization" }
+local function makeWideBtn(parent, name, cb)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 28); btn.BorderSizePixel = 0
+    btn.Text = name; btn.TextSize = 12
+    btn.AutoButtonColor = true; btn.Parent = parent
+    addBtn(btn)
+    addText(btn); addFont(btn)
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
+    btn.MouseButton1Click:Connect(cb)
+    return btn
+end
+
+local tabNames = { "Customization", "Game", "Game Customization", "Movement" }
 local tabButtons, tabFrames = {}, {}
 
 local function switchTab(name)
@@ -1022,6 +1272,7 @@ end
 local customTab = tabFrames["Customization"]
 local gameTab = tabFrames["Game"]
 local gameCustTab = tabFrames["Game Customization"]
+local movementTab = tabFrames["Movement"]
 
 makeSectionHeader(customTab, "FONT")
 
@@ -1066,6 +1317,38 @@ end
 syncFontButtons()
 registerSync(syncFontButtons)
 
+makeSectionHeader(customTab, "CUSTOM CURSOR")
+makeToggle(customTab, "Cursor Enabled",
+    function() return Config.Cursor.Enabled end,
+    function(v) Config.Cursor.Enabled = v end,
+    function(v)
+        if v then
+            if Config.Cursor.ImageId ~= "" and cursorImage then cursorImage.Visible = true end
+            if Config.Cursor.HideDefault then setDefaultCursorVisible(false) end
+        else
+            if cursorImage then cursorImage.Visible = false end
+            setDefaultCursorVisible(true)
+        end
+    end)
+
+makeToggle(customTab, "Hide Default Cursor",
+    function() return Config.Cursor.HideDefault end,
+    function(v) Config.Cursor.HideDefault = v end,
+    function(v)
+        if Config.Cursor.Enabled then setDefaultCursorVisible(not v) else setDefaultCursorVisible(true) end
+    end)
+
+makeTextBox(customTab, "Image ID",
+    function() return Config.Cursor.ImageId end,
+    function(v) Config.Cursor.ImageId = v end,
+    function(text) applyCursorImage(text) end,
+    "e.g. 6031097225")
+
+makeSlider(customTab, "Size (px)", 8, 128,
+    function() return Config.Cursor.Size end,
+    function(v) Config.Cursor.Size = v end, true,
+    function(v) if cursorImage then cursorImage.Size = UDim2.new(0, v, 0, v) end end)
+
 makeSectionHeader(customTab, "CHANGELOG")
 
 local changelogBtn = Instance.new("TextButton")
@@ -1076,25 +1359,88 @@ addBtn(changelogBtn); addText(changelogBtn); addFont(changelogBtn)
 local clbtnc = Instance.new("UICorner"); clbtnc.CornerRadius = UDim.new(0, 6); clbtnc.Parent = changelogBtn
 changelogBtn.MouseButton1Click:Connect(function() openChangelog() end)
 
-makeSectionHeader(gameTab, "FREECAM")
-makeToggle(gameTab, "Freecam Enabled",
-    function() return Config.Freecam.Enabled end,
-    function(v) Config.Freecam.Enabled = v end,
-    function(v) if v then startFreecam() else stopFreecam() end end)
-makeSlider(gameTab, "Flight speed", 0.2, 5.0,
-    function() return Config.Freecam.Speed end,
-    function(v) Config.Freecam.Speed = v end, false)
-makeSlider(gameTab, "Mouse sensitivity", 0.0005, 0.01,
-    function() return Config.Freecam.Sensitivity end,
-    function(v) Config.Freecam.Sensitivity = v end, false)
+makeSectionHeader(gameTab, "AIMBOT (PLAYERS)")
+makeToggle(gameTab, "Aimbot Enabled",
+    function() return Config.Aim.Enabled end,
+    function(v) Config.Aim.Enabled = v end)
 
-local freecamHelp = Instance.new("TextLabel")
-freecamHelp.Size = UDim2.new(1, 0, 0, 34); freecamHelp.BackgroundTransparency = 1
-freecamHelp.Text = "WASD — fly • Space — up • LeftCtrl — down\nLeftShift — boost • RMB — rotate camera"
-freecamHelp.TextColor3 = Color3.fromRGB(170, 170, 170)
-freecamHelp.TextSize = 10
-freecamHelp.TextWrapped = true; freecamHelp.Parent = gameTab
-addFont(freecamHelp)
+local aimPartRow = Instance.new("Frame")
+aimPartRow.Size = UDim2.new(1, 0, 0, 46); aimPartRow.BorderSizePixel = 0
+aimPartRow.Parent = gameTab
+addBtn(aimPartRow)
+local aprc = Instance.new("UICorner"); aprc.CornerRadius = UDim.new(0, 6); aprc.Parent = aimPartRow
+
+local aprLbl = Instance.new("TextLabel")
+aprLbl.Size = UDim2.new(1, -24, 0, 18); aprLbl.Position = UDim2.new(0, 12, 0, 2)
+aprLbl.BackgroundTransparency = 1; aprLbl.Text = "Aim Part"
+aprLbl.TextSize = 12
+aprLbl.TextXAlignment = Enum.TextXAlignment.Left; aprLbl.Parent = aimPartRow
+addText(aprLbl); addFont(aprLbl)
+
+local aprRow = Instance.new("Frame")
+aprRow.Size = UDim2.new(1, -24, 0, 20); aprRow.Position = UDim2.new(0, 12, 0, 22)
+aprRow.BackgroundTransparency = 1; aprRow.Parent = aimPartRow
+local aprLayout = Instance.new("UIListLayout")
+aprLayout.FillDirection = Enum.FillDirection.Horizontal
+aprLayout.Padding = UDim.new(0, 4); aprLayout.SortOrder = Enum.SortOrder.LayoutOrder
+aprLayout.Parent = aprRow
+
+local aimPartBtns = {}
+local function syncAimParts()
+    for val, b in pairs(aimPartBtns) do
+        if Config.Aim.AimPart == val then
+            b.BackgroundColor3 = Theme.Accent
+            b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            b.BackgroundColor3 = Theme.Button
+            b.TextColor3 = Theme.Text
+        end
+    end
+end
+
+for _, opt in ipairs({"Head", "Torso"}) do
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.5, -2, 1, 0); b.BorderSizePixel = 0
+    b.Text = opt; b.TextSize = 11; b.AutoButtonColor = true
+    b.Parent = aprRow
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = b
+    table.insert(ThemeRefs.button, {el=b, p="BackgroundColor3"})
+    table.insert(ThemeRefs.text, {el=b, p="TextColor3"})
+    addFont(b)
+    b.BackgroundColor3 = Theme.Button
+    b.TextColor3 = Theme.Text
+    aimPartBtns[opt] = b
+    b.MouseButton1Click:Connect(function()
+        Config.Aim.AimPart = opt; syncAimParts()
+    end)
+end
+syncAimParts()
+registerSync(syncAimParts)
+
+makeSlider(gameTab, "FOV Radius (px)", 10, 500,
+    function() return Config.Aim.FOVRadius end,
+    function(v) Config.Aim.FOVRadius = v end, true,
+    function(v) fovCircle.Radius = v end)
+makeSlider(gameTab, "Smoothness", 0.05, 1.0,
+    function() return Config.Aim.Smoothness end,
+    function(v) Config.Aim.Smoothness = v end, false)
+makeSlider(gameTab, "Max Distance (studs)", 50, 2000,
+    function() return Config.Aim.MaxDistance end,
+    function(v) Config.Aim.MaxDistance = v end, true)
+makeSlider(gameTab, "Max Move Per Frame (px)", 5, 200,
+    function() return Config.Aim.MaxMovePerFrame end,
+    function(v) Config.Aim.MaxMovePerFrame = v end, true)
+
+makeSectionHeader(gameTab, "VERTICAL BLOCK")
+makeToggle(gameTab, "Disable if enemy is above/below",
+    function() return Config.Aim.VerticalBlockEnabled end,
+    function(v) Config.Aim.VerticalBlockEnabled = v end)
+makeSlider(gameTab, "Horizontal radius (studs)", 1, 15,
+    function() return Config.Aim.VerticalBlockRadius end,
+    function(v) Config.Aim.VerticalBlockRadius = v end, false)
+makeSlider(gameTab, "Min height diff (studs)", 1, 20,
+    function() return Config.Aim.VerticalBlockMinHeight end,
+    function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
 
 makeSectionHeader(gameTab, "SPECTATE")
 makeToggle(gameTab, "Spectate Enabled",
@@ -1155,7 +1501,7 @@ function refreshSpectateList()
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         local alive = hum and hum.Health > 0
         local isTarget = (Spectate.Target == p)
-        local inWl = Config.Whitelist[p.Name] == true
+        local inWl = Config.Aim.Whitelist[p.Name] == true
 
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, 0, 0, 22); btn.BorderSizePixel = 0
@@ -1181,8 +1527,8 @@ function refreshSpectateList()
         local wlc2 = Instance.new("UICorner"); wlc2.CornerRadius = UDim.new(0, 4); wlc2.Parent = wlBtn
 
         wlBtn.MouseButton1Click:Connect(function()
-            if Config.Whitelist[p.Name] then Config.Whitelist[p.Name] = nil
-            else Config.Whitelist[p.Name] = true end
+            if Config.Aim.Whitelist[p.Name] then Config.Aim.Whitelist[p.Name] = nil
+            else Config.Aim.Whitelist[p.Name] = true end
             refreshSpectateList(); if refreshWhitelistUI then refreshWhitelistUI() end
         end)
 
@@ -1217,13 +1563,34 @@ task.spawn(function()
     end
 end)
 
+makeSectionHeader(movementTab, "JUMP")
+makeToggle(movementTab, "Infinite Jump",
+    function() return Config.InfiniteJump.Enabled end,
+    function(v) Config.InfiniteJump.Enabled = v end)
+
+makeSectionHeader(movementTab, "FORCE SPEED")
+makeToggle(movementTab, "Force Speed Enabled",
+    function() return Config.ForceSpeed.Enabled end,
+    function(v) setForceSpeedEnabled(v) end)
+makeToggle(movementTab, "Sprint Force (Shift +8)",
+    function() return Config.ForceSpeed.SprintForce end,
+    function(v) Config.ForceSpeed.SprintForce = v end)
+    
+local speedSlider
+speedSlider = makeSlider(movementTab, "Force Speed", 16, 35,
+    function() return Config.ForceSpeed.Speed end,
+    function(v) 
+        Config.ForceSpeed.Speed = v 
+        local maxAllowed = Config.ForceSpeed.SprintForce and 27 or 35
+        if v > maxAllowed then
+            Config.ForceSpeed.Speed = maxAllowed
+        end
+    end, true)
+
 makeSectionHeader(gameCustTab, "ESP")
 makeToggle(gameCustTab, "ESP Enabled",
     function() return Config.ESP.Enabled end,
     function(v) Config.ESP.Enabled = v end)
-makeToggle(gameCustTab, "Show Highlight (OFF by default)",
-    function() return Config.ESP.ShowHighlight end,
-    function(v) Config.ESP.ShowHighlight = v end)
 makeSlider(gameCustTab, "Highlight distance", 50, 2000,
     function() return Config.ESP.MaxDistForHighlight end,
     function(v) Config.ESP.MaxDistForHighlight = v end, true)
@@ -1234,14 +1601,14 @@ makeSlider(gameCustTab, "Text size", 8, 32,
 makeSectionHeader(gameCustTab, "ESP ELEMENTS")
 makeToggle(gameCustTab, "Show Name", function() return Config.ESP.ShowName end, function(v) Config.ESP.ShowName = v end)
 makeToggle(gameCustTab, "Show HP", function() return Config.ESP.ShowHP end, function(v) Config.ESP.ShowHP = v end)
-makeToggle(gameCustTab, "Show Player ID", function() return Config.ESP.ShowPlayerId end, function(v) Config.ESP.ShowPlayerId = v end)
+makeToggle(gameCustTab, "Show Distance", function() return Config.ESP.ShowDistance end, function(v) Config.ESP.ShowDistance = v end)
 
 makeSectionHeader(gameCustTab, "WHITELIST HIGHLIGHT")
 makeToggle(gameCustTab, "Whitelist highlight enabled",
     function() return Config.ESP.WhitelistHighlight.Enabled end,
     function(v) Config.ESP.WhitelistHighlight.Enabled = v end)
 
-makeSectionHeader(gameCustTab, "WHITELIST — Aimbot ignores these players")
+makeSectionHeader(gameCustTab, "WHITELIST Aimbot ignores these players")
 
 local wlListFrame
 local refreshWhitelistUI
@@ -1255,7 +1622,7 @@ makeTextBox(gameCustTab, "Add player (name + Enter)",
         for _, p in ipairs(Players:GetPlayers()) do
             if p.Name:lower() == name:lower() then name = p.Name; break end
         end
-        Config.Whitelist[name] = true
+        Config.Aim.Whitelist[name] = true
         if refreshWhitelistUI then refreshWhitelistUI() end
         if refreshSpectateList then refreshSpectateList() end
     end, "player name + Enter")
@@ -1279,7 +1646,7 @@ refreshWhitelistUI = function()
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then child:Destroy() end
     end
     local names = {}
-    for n in pairs(Config.Whitelist) do table.insert(names, n) end
+    for n in pairs(Config.Aim.Whitelist) do table.insert(names, n) end
     table.sort(names)
     if #names == 0 then
         local e = Instance.new("TextLabel")
@@ -1317,7 +1684,7 @@ refreshWhitelistUI = function()
         local rbc = Instance.new("UICorner"); rbc.CornerRadius = UDim.new(0, 4); rbc.Parent = rb
 
         rb.MouseButton1Click:Connect(function()
-            Config.Whitelist[name] = nil
+            Config.Aim.Whitelist[name] = nil
             refreshWhitelistUI()
             if refreshSpectateList then refreshSpectateList() end
         end)
@@ -1334,7 +1701,7 @@ wlBtnLayout.Parent = wlBtnRow
 
 makeTrioBtn(wlBtnRow, "Add All", function()
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then Config.Whitelist[p.Name] = true end
+        if p ~= LocalPlayer then Config.Aim.Whitelist[p.Name] = true end
     end
     refreshWhitelistUI(); if refreshSpectateList then refreshSpectateList() end
 end)
@@ -1343,7 +1710,7 @@ makeTrioBtn(wlBtnRow, "Refresh", function()
     if refreshSpectateList then refreshSpectateList() end
 end)
 makeTrioBtn(wlBtnRow, "Clear", function()
-    Config.Whitelist = {}
+    Config.Aim.Whitelist = {}
     refreshWhitelistUI(); if refreshSpectateList then refreshSpectateList() end
 end)
 
