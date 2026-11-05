@@ -107,6 +107,62 @@ end
 
 showSplash()
 
+local VAGRANT_PLACE_ID = 100283815455755
+
+local function showWrongGameError()
+    local errGui = Instance.new("ScreenGui")
+    errGui.Name = "VagrantWrongGame"
+    errGui.ResetOnSpawn = false
+    errGui.IgnoreGuiInset = true
+    errGui.DisplayOrder = 2147483647
+    errGui.Parent = guiParent
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(0, 460, 0, 180)
+    card.Position = UDim2.new(0.5, -230, 0.5, -90)
+    card.BackgroundColor3 = Color3.fromRGB(30, 10, 10)
+    card.BackgroundTransparency = 0.05
+    card.BorderSizePixel = 0
+    card.Parent = errGui
+    local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 12); cc.Parent = card
+    local cs = Instance.new("UIStroke"); cs.Color = Color3.fromRGB(220, 40, 40); cs.Thickness = 2; cs.Parent = card
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -20, 0, 40)
+    titleLbl.Position = UDim2.new(0, 10, 0, 15)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = "Failed"
+    titleLbl.TextColor3 = Color3.fromRGB(255, 80, 80)
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 26
+    titleLbl.Parent = card
+
+    local bodyLbl = Instance.new("TextLabel")
+    bodyLbl.Size = UDim2.new(1, -30, 0, 80)
+    bodyLbl.Position = UDim2.new(0, 15, 0, 60)
+    bodyLbl.BackgroundTransparency = 1
+    bodyLbl.Text = "Вы находитесь не в Vagrant Survival!"
+    bodyLbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+    bodyLbl.Font = Enum.Font.Gotham
+    bodyLbl.TextSize = 15
+    bodyLbl.TextWrapped = true
+    bodyLbl.TextXAlignment = Enum.TextXAlignment.Center
+    bodyLbl.TextYAlignment = Enum.TextYAlignment.Center
+    bodyLbl.Parent = card
+end
+
+if game.PlaceId ~= VAGRANT_PLACE_ID then
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Failed",
+            Text = "Вы находитесь не в Vagrant Survival!",
+            Duration = 10,
+        })
+    end)
+    showWrongGameError()
+    return
+end
+
 local _activeNotifs = {}
 
 local function _repositionNotifs()
@@ -238,17 +294,9 @@ local Config = {
         MinDot = 0.1, MaxMovePerFrame = 60, AimPart = "Head",
         VerticalBlockEnabled = true, VerticalBlockRadius = 3, VerticalBlockMinHeight = 3,
         Whitelist = {},
-        NPCAimEnabled = false,
-        NPCMaxDistance = 500,
-        NPCCachedHeads = {},
-        NPCHighlights = {},
-        NPCBillboards = {},
-        NPCShowHP = true,
-        NPCShowDistance = true,
-        NPCTextSize = 14,
     },
     InfiniteJump = { Enabled = false },
-    ForceSpeed = { Enabled = false, Speed = 24 },
+    ForceSpeed = { Enabled = false, Speed = 24, SprintForce = false },
     Cursor = { Enabled = false, ImageId = "", Size = 32, HideDefault = true },
     Spectate = { AutoSwitchOnDeath = true },
     Font = "Silkscreen",
@@ -666,40 +714,11 @@ local function collectPlayerTargets()
     return list
 end
 
-local function collectNPCTargets()
-    local list = {}
-    local cameraPos = Camera.CFrame.Position
-    local cameraLook = Camera.CFrame.LookVector
-    for _, model in ipairs(Config.Aim.NPCCachedHeads) do
-        if model and model.Parent then
-            local head = model:FindFirstChild("Head")
-            local hum = model:FindFirstChildOfClass("Humanoid")
-            local alive = (hum == nil) or (hum.Health > 0)
-            if head and head:IsA("BasePart") and alive then
-                local worldDist = (head.Position - cameraPos).Magnitude
-                if worldDist <= Config.Aim.NPCMaxDistance then
-                    local dirUnit = (head.Position - cameraPos).Unit
-                    if cameraLook:Dot(dirUnit) >= Config.Aim.MinDot then
-                        table.insert(list, { part = head, model = model })
-                    end
-                end
-            end
-        end
-    end
-    return list
-end
-
 local function getClosestTargetToCursor()
     local closest, shortDist = nil, Config.Aim.FOVRadius
     local mousePos = UserInputService:GetMouseLocation()
 
-    local candidates = {}
-    if Config.Aim.Enabled then
-        for _, t in ipairs(collectPlayerTargets()) do table.insert(candidates, t) end
-    end
-    if Config.Aim.NPCAimEnabled then
-        for _, t in ipairs(collectNPCTargets()) do table.insert(candidates, t) end
-    end
+    local candidates = collectPlayerTargets()
 
     for _, t in ipairs(candidates) do
         local screenPos = getScreenPoint(t.part)
@@ -717,7 +736,7 @@ end
 local hasMouseMoveRel = type(mousemoverel) == "function"
 
 RunService.RenderStepped:Connect(function()
-    if (not Config.Aim.Enabled and not Config.Aim.NPCAimEnabled) or not hasMouseMoveRel then return end
+    if not Config.Aim.Enabled or not hasMouseMoveRel then return end
     if isTargetDirectlyAboveOrBelow() then return end
     local target = getClosestTargetToCursor()
     if not target then return end
@@ -731,146 +750,6 @@ RunService.RenderStepped:Connect(function()
     local mx = math.clamp(dx * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
     local my = math.clamp(dy * Config.Aim.Smoothness, -Config.Aim.MaxMovePerFrame, Config.Aim.MaxMovePerFrame)
     mousemoverel(mx, my)
-end)
-
-local function isModelPlayerCharacter(model)
-    return Players:GetPlayerFromCharacter(model) ~= nil
-end
-
-local function clearNPCHighlights()
-    for model, hl in pairs(Config.Aim.NPCHighlights) do
-        if hl and hl.Parent then pcall(function() hl:Destroy() end) end
-    end
-    Config.Aim.NPCHighlights = {}
-end
-
-local function clearNPCBills()
-    for model, bb in pairs(Config.Aim.NPCBillboards) do
-        if bb and bb.Parent then pcall(function() bb:Destroy() end) end
-    end
-    Config.Aim.NPCBillboards = {}
-end
-
-local function applyNPCHighlight(model)
-    if not model or not model.Parent then return end
-    local h = Config.Aim.NPCHighlights[model]
-    if not h or not h.Parent then
-        h = Instance.new("Highlight")
-        h.Name = "VagrantNPC_Highlight"
-        h.Adornee = model
-        h.FillColor = Color3.fromRGB(255, 40, 40)
-        h.OutlineColor = Color3.fromRGB(255, 80, 80)
-        h.FillTransparency = 0.5
-        h.OutlineTransparency = 0
-        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        h.Parent = model
-        Config.Aim.NPCHighlights[model] = h
-    else
-        h.Adornee = model
-    end
-end
-
-local function applyNPCB Billboard(model)
-    if not model or not model.Parent then return end
-    local head = model:FindFirstChild("Head")
-    if not head or not head:IsA("BasePart") then return end
-    local bb = Config.Aim.NPCBillboards[model]
-    if not bb or not bb.Parent then
-        bb = Instance.new("BillboardGui")
-        bb.Name = "VagrantNPC_Billboard"
-        bb.Adornee = head
-        bb.Size = UDim2.new(0, 200, 0, 50)
-        bb.StudsOffset = Vector3.new(0, 3, 0)
-        bb.AlwaysOnTop = true
-        bb.MaxDistance = math.huge
-        local lbl = Instance.new("TextLabel")
-        lbl.Name = "NPC_Label"
-        lbl.Size = UDim2.new(1, 0, 1, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.TextColor3 = Color3.fromRGB(255, 80, 80)
-        lbl.TextStrokeTransparency = 0
-        lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        lbl.TextSize = Config.Aim.NPCTextSize
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextXAlignment = Enum.TextXAlignment.Center
-        lbl.TextYAlignment = Enum.TextYAlignment.Center
-        lbl.RichText = true
-        lbl.Parent = bb
-        bb.Parent = head
-        Config.Aim.NPCBillboards[model] = bb
-    else
-        bb.Adornee = head
-    end
-
-    local lbl = bb:FindFirstChild("NPC_Label")
-    if lbl then
-        local hum = model:FindFirstChildOfClass("Humanoid")
-        local lines = {}
-        table.insert(lines, string.format('<font color="rgb(255,120,120)">%s</font>', model.Name))
-        if hum then
-            table.insert(lines, string.format('<font color="rgb(255,60,60)">HP: %d/%d</font>',
-                math.floor(hum.Health), math.floor(hum.MaxHealth)))
-        end
-        local dist = (head.Position - Camera.CFrame.Position).Magnitude
-        table.insert(lines, string.format('<font color="rgb(255,180,180)">Distance: %d studs</font>', math.floor(dist)))
-        lbl.TextSize = Config.Aim.NPCTextSize
-        lbl.RichText = true
-        lbl.Text = table.concat(lines, "\n")
-    end
-end
-
-local function scanNPCs()
-    local found = {}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and not isModelPlayerCharacter(obj) then
-            local head = obj:FindFirstChild("Head")
-            local hum = obj:FindFirstChildOfClass("Humanoid")
-            if head and head:IsA("BasePart") then
-                local alive = (hum == nil) or (hum.Health > 0)
-                if alive then
-                    table.insert(found, obj)
-                end
-            end
-        end
-    end
-    Config.Aim.NPCCachedHeads = found
-    return #found
-end
-
-local function highlightAllNPCs()
-    clearNPCHighlights()
-    clearNPCBills()
-    for _, model in ipairs(Config.Aim.NPCCachedHeads) do
-        if model and model.Parent then
-            applyNPCHighlight(model)
-            applyNPCB Billboard(model)
-        end
-    end
-end
-
-local npcAcc = 0
-RunService.Heartbeat:Connect(function(dt)
-    npcAcc = npcAcc + dt
-    if npcAcc < 0.2 then return end
-    npcAcc = 0
-    for _, model in ipairs(Config.Aim.NPCCachedHeads) do
-        if model and model.Parent then
-            applyNPCB Billboard(model)
-        end
-    end
-end)
-
-task.spawn(function()
-    task.wait(5)
-    local count = scanNPCs()
-    highlightAllNPCs()
-    print("[NPC] Initial scan: " .. tostring(count) .. " NPC(s)")
-    while true do
-        task.wait(600)
-        count = scanNPCs()
-        highlightAllNPCs()
-        print("[NPC] Auto-refresh (10 min): " .. tostring(count) .. " NPC(s)")
-    end
 end)
 
 local function performJump()
@@ -944,10 +823,11 @@ local function setForceSpeedEnabled(enabled)
                 if moveDir.Magnitude > 0.1 then
                     local dir = Vector3.new(moveDir.X, 0, moveDir.Z)
                     if dir.Magnitude > 0 then
-                        local baseSpeed = math.clamp(Config.ForceSpeed.Speed, 16, 30)
+                        local maxSpeed = Config.ForceSpeed.SprintForce and 27 or 35
+                        local baseSpeed = math.clamp(Config.ForceSpeed.Speed, 16, maxSpeed)
                         local speed = baseSpeed
-                        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-                            speed = math.min(35, baseSpeed + 5)
+                        if Config.ForceSpeed.SprintForce and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                            speed = math.min(35, baseSpeed + 8)
                         end
                         ForceSpeed.BodyVel.Velocity = dir.Unit * speed
                     else
@@ -1562,38 +1442,6 @@ makeSlider(gameTab, "Min height diff (studs)", 1, 20,
     function() return Config.Aim.VerticalBlockMinHeight end,
     function(v) Config.Aim.VerticalBlockMinHeight = v end, false)
 
-makeSectionHeader(gameTab, "AIMBOT (NPC)")
-makeToggle(gameTab, "NPC Aimbot Enabled",
-    function() return Config.Aim.NPCAimEnabled end,
-    function(v) Config.Aim.NPCAimEnabled = v end)
-makeSlider(gameTab, "NPC Max Distance (studs)", 50, 3000,
-    function() return Config.Aim.NPCMaxDistance end,
-    function(v) Config.Aim.NPCMaxDistance = v end, true)
-makeSlider(gameTab, "NPC Text Size", 8, 32,
-    function() return Config.Aim.NPCTextSize end,
-    function(v) Config.Aim.NPCTextSize = v end, true)
-
-local npcStatusLbl = Instance.new("TextLabel")
-npcStatusLbl.Size = UDim2.new(1, 0, 0, 18); npcStatusLbl.BackgroundTransparency = 1
-npcStatusLbl.Text = "NPCs cached: " .. tostring(#Config.Aim.NPCCachedHeads)
-npcStatusLbl.TextColor3 = Color3.fromRGB(170, 170, 170); npcStatusLbl.TextSize = 11
-npcStatusLbl.TextXAlignment = Enum.TextXAlignment.Left; npcStatusLbl.Parent = gameTab
-addFont(npcStatusLbl)
-
-makeWideBtn(gameTab, "Scan Workspace for NPCs", function()
-    local count = scanNPCs()
-    highlightAllNPCs()
-    npcStatusLbl.Text = "NPCs cached: " .. tostring(count)
-    showNotification("NPC Scan", "Found " .. tostring(count) .. " NPC(s), highlighted red", 4, false)
-end)
-
-makeWideBtn(gameTab, "Clear NPC Cache", function()
-    Config.Aim.NPCCachedHeads = {}
-    clearNPCHighlights()
-    clearNPCBills()
-    npcStatusLbl.Text = "NPCs cached: 0"
-end)
-
 makeSectionHeader(gameTab, "SPECTATE")
 makeToggle(gameTab, "Spectate Enabled",
     function() return Spectate.Enabled end,
@@ -1724,9 +1572,20 @@ makeSectionHeader(movementTab, "FORCE SPEED")
 makeToggle(movementTab, "Force Speed Enabled",
     function() return Config.ForceSpeed.Enabled end,
     function(v) setForceSpeedEnabled(v) end)
-makeSlider(movementTab, "Force Speed (16-30)", 16, 30,
+makeToggle(movementTab, "Sprint Force (Shift +8)",
+    function() return Config.ForceSpeed.SprintForce end,
+    function(v) Config.ForceSpeed.SprintForce = v end)
+    
+local speedSlider
+speedSlider = makeSlider(movementTab, "Force Speed", 16, 35,
     function() return Config.ForceSpeed.Speed end,
-    function(v) Config.ForceSpeed.Speed = v end, true)
+    function(v) 
+        Config.ForceSpeed.Speed = v 
+        local maxAllowed = Config.ForceSpeed.SprintForce and 27 or 35
+        if v > maxAllowed then
+            Config.ForceSpeed.Speed = maxAllowed
+        end
+    end, true)
 
 makeSectionHeader(gameCustTab, "ESP")
 makeToggle(gameCustTab, "ESP Enabled",
